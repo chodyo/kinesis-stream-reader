@@ -1,7 +1,10 @@
-#You must create a file named:
+#You must create a file in the root directory (with app.js) named
+
 `secrets.js`
 
+
 Fill it with the following, entering in the data where relevant:
+
 --------------------------------- `secrets.js` ---------------------------------
 ```
 var AWS = require('aws-sdk');
