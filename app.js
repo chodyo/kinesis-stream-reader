@@ -22,6 +22,7 @@ var app = http.createServer(function (req, res) {
 app.listen(4000);
 console.log('Listening on Port 4000....');
 
+var processRequest = function (req) {
 	console.log('YES!!!!!!!!! New Request received: ' + req.url);
 
 	var queryObject = url.parse(req.url, true).query;
@@ -126,12 +127,10 @@ var deaggregate = function (kinesisRecord, computeChecksums, perRecordCallback, 
 
 			// decode the protobuf binary from byte offset 4 to length-16 (last
 			// 16 are checksum)
-			var protobufMessage = AggregatedRecord.decode(recordBuffer.slice(4,
-				recordBuffer.length - 16));
+			var protobufMessage = AggregatedRecord.decode(recordBuffer.slice(4, recordBuffer.length - 16));
 
 			// extract the kinesis record checksum
-			var recordChecksum = recordBuffer.slice(recordBuffer.length - 16,
-				recordBuffer.length).toString('base64');
+			var recordChecksum = recordBuffer.slice(recordBuffer.length - 16, recordBuffer.length).toString('base64');
 
 			if (computeChecksums === true) {
 				// compute a checksum from the serialised protobuf message
@@ -144,21 +143,18 @@ var deaggregate = function (kinesisRecord, computeChecksums, perRecordCallback, 
 				if (calculatedChecksum !== recordChecksum) {
 					if (debug) {
 						console.log("Record Checksum: " + recordChecksum);
-						console.log("Calculated Checksum: "
-							+ calculatedChecksum);
+						console.log("Calculated Checksum: " + calculatedChecksum);
 					}
 					throw new Error("Invalid record checksum");
 				}
 			} else {
 				if (debug) {
-					console
-						.log("WARN: Record Checksum Verification turned off");
+					console.log("WARN: Record Checksum Verification turned off");
 				}
 			}
 
 			if (debug) {
-				console.log("Found " + protobufMessage.records.length
-					+ " KPL Encoded Messages");
+				console.log("Found " + protobufMessage.records.length + " KPL Encoded Messages");
 			}
 
 			// iterate over each User Record in order
@@ -168,9 +164,7 @@ var deaggregate = function (kinesisRecord, computeChecksums, perRecordCallback, 
 
 					// emit the per-record callback with the extracted partition
 					// keys and sequence information
-					var record = perRecordCallback(
-						null,
-						{
+					var record = perRecordCallback(null, {
 							partitionKey: protobufMessage["partition_key_table"][item["partition_key_index"]],
 							explicitPartitionKey: protobufMessage["explicit_hash_key_table"][item["explicit_hash_key_index"]],
 							sequenceNumber: kinesisRecord.sequenceNumber,
@@ -189,11 +183,7 @@ var deaggregate = function (kinesisRecord, computeChecksums, perRecordCallback, 
 		// user records vs plain Kinesis Records on the basis of the
 		// sub-sequence number
 		if (debug) {
-			console
-				.log("WARN: Non KPL Aggregated Message Processed for DeAggregation: "
-				+ kinesisRecord.partitionKey
-				+ "-"
-				+ kinesisRecord.sequenceNumber);
+			console.log("WARN: Non KPL Aggregated Message Processed for DeAggregation: " + kinesisRecord.partitionKey + "-" + kinesisRecord.sequenceNumber);
 		}
 		var record = perRecordCallback(null, {
 			partitionKey: kinesisRecord.PartitionKey,
