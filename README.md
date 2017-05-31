@@ -6,7 +6,7 @@
 Fill it with the following, entering in the data where relevant:
 
 --------------------------------- `secrets.js` ---------------------------------
-```
+```javascript
 var AWS = require('aws-sdk');
 
 // NEVER EVER EVER EVER UPLOAD THIS TO A REPOSITORY!!!!!!!!!!
