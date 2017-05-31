@@ -7,6 +7,7 @@ var url = require('url');
 var common = require('./common');
 
 var kinesis = require('./secrets').getKinesis();
+var streamName;
 var response;
 // global AggregatedRecord object which will hold the protocol buffer model
 var AggregatedRecord = common.loadBuilder();
@@ -21,7 +22,6 @@ var app = http.createServer(function (req, res) {
 app.listen(4000);
 console.log('Listening on Port 4000....');
 
-var processRequest = function(req) {
 	console.log('YES!!!!!!!!! New Request received: ' + req.url);
 
 	var queryObject = url.parse(req.url, true).query;
@@ -31,9 +31,9 @@ var processRequest = function(req) {
 	var myStartTime = Math.floor(Date.now() / 1000) - passedTimeFrame * 60;
 
 	if (typeof queryObject.streamname !== 'undefined' && queryObject)
-		var streamName = queryObject.streamname;
+		streamName = queryObject.streamname;
 	else
-		var streamName = 'evolve-test_cti_events';
+		streamName = 'evolve-test_cti_events';
 
 	return {
 		ShardId: '0', /* required */
@@ -46,19 +46,19 @@ var processRequest = function(req) {
 
 // -------------- AWS SECTION -------------- 
 
-var setResponse = function(params) {
+var setResponse = function (params) {
 	try {
 		kinesis.getShardIterator(params, afterShardIterator);
 	}
 	catch (e) {
 		console.log(e, e.stack);
 		response.setHeader('Content-type', 'text/plain');
-		response.write("Invalid Streamname OR I've no clue whats going on.");
+		response.write("Invalid Streamname: " + streamName + "\nOR I've no clue whats going on.");
 		response.end();
 	}
 }
 
-var afterShardIterator = function(err, data) {
+var afterShardIterator = function (err, data) {
 	if (!err) {
 		if (data.ShardIterator != '') {
 			params = {
@@ -67,15 +67,20 @@ var afterShardIterator = function(err, data) {
 			};
 			kinesis.getRecords(params, handleKinesisRecords);
 		} else {
-			throw "No Shard Iterator received";
+			response.setHeader('Content-type', 'text/plain');
+			response.write("No Shard Iterator received");
+			response.end();
 		}
 	}
 	else {
-		throw err;
+		console.log(err, err.stack);
+		response.setHeader('Content-type', 'text/plain');
+		response.write("Invalid Streamname: " + streamName + "\nOR I've no clue whats going on.");
+		response.end();
 	}
 }
 
-var handleKinesisRecords = function(err, data) {
+var handleKinesisRecords = function (err, data) {
 	var separator = ",\n";
 	var jsonResponse = '[';
 	if (!err) {
@@ -85,7 +90,7 @@ var handleKinesisRecords = function(err, data) {
 			// jsonResponse += agg.deaggregateSync(aggregateRecord.kinesis, getRecordAsJson);
 			var deaggregatedList = deaggregate(aggregateRecord, false, getRecordAsJson);
 			jsonResponse += deaggregatedList.join(separator);
-			if (i != allRecords.length-1) jsonResponse += separator;
+			if (i != allRecords.length - 1) jsonResponse += separator;
 		}
 		jsonResponse += ']';
 	}
@@ -96,13 +101,13 @@ var handleKinesisRecords = function(err, data) {
 	}
 	else {
 		response.writeHead(200, { "Content-Type": "text/plain" });
-		response.write("Stream " + data.streamName + " exists, but there were no records found in it.");
+		response.write("Stream " + streamName + " exists, but there were no records found in it.");
 	}
 	response.end();
 }
 
 // based off of https://github.com/awslabs/kinesis-aggregation/blob/master/node/node_modules/aws-kinesis-agg/kpl-deagg.js
-var deaggregate = function(kinesisRecord, computeChecksums, perRecordCallback, afterRecordCallback) {
+var deaggregate = function (kinesisRecord, computeChecksums, perRecordCallback, afterRecordCallback) {
 	"use strict";
 	/* jshint -W069 */// suppress warnings about dot notation (use of
 	// underscores in protobuf model)
@@ -201,7 +206,7 @@ var deaggregate = function(kinesisRecord, computeChecksums, perRecordCallback, a
 	return records;
 };
 
-var getRecordAsJson = function(err, singleRecord) {
+var getRecordAsJson = function (err, singleRecord) {
 	if (!err) {
 		// foreach
 		var entry = new Buffer(singleRecord.data, 'base64').toString();
