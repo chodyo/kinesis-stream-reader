@@ -1,8 +1,9 @@
-You must create a file named:
-secrets.js
+#You must create a file named:
+`secrets.js`
 
 Fill it with the following, entering in the data where relevant:
---------------------------------- secrets.js ---------------------------------
+--------------------------------- `secrets.js` ---------------------------------
+```
 var AWS = require('aws-sdk');
 
 // NEVER EVER EVER EVER UPLOAD THIS TO A REPOSITORY!!!!!!!!!!
@@ -14,3 +15,4 @@ module.exports.getKinesis = function() {
         region: 'xxxxxxxxx'
     });
 };
+```
