@@ -5,8 +5,9 @@ var common = require('./resources/common');
 var kinesis = require('./secrets').getKinesis();
 
 // global variable to allow query params to be accessable from all functions
-// query params: duration, stream, contactID, agentID, server
 var query;
+// allowed query params: duration, streamname, contactId, agentId, serverName
+var allowedQueryParams = ["duration", "streamname", "contactId", "agentId", "serverName"]
 // global variable to make the response accessable anywhere
 var response;
 // global AggregatedRecord object which will hold the protocol buffer model
@@ -20,6 +21,20 @@ var app = http.createServer(function (req, res) {
         res.writeHead(200, { 'Content-Type': 'image/x-icon' });
         res.end();
         console.log('favicon requested & ignored');
+        return;
+    }
+
+    // quick sanity check for the user on query params
+    var queryCheck = Object.keys(url.parse(req.url, true).query);
+    // filter out any allowed query params to see if there are disallowed params
+    queryCheck = queryCheck.filter(function(q) { 
+        return allowedQueryParams.indexOf(q) < 0;
+    });
+    if (queryCheck.length > 0) {
+        res.setHeader('Content-type', 'text/plain');
+        res.write("The following query parameters are not recognized:\n" + queryCheck);
+        res.end();
+        console.log('bad query params');
         return;
     }
 
@@ -85,27 +100,63 @@ var afterShardIterator = function (err, data) {
 }
 
 var handleKinesisRecords = function (err, data) {
-    var separator = ",\n";
-    var jsonResponse = '[';
     if (!err) {
         var allRecords = data.Records;
+        var deaggregatedList = []
         for (var i = 0; i < allRecords.length; ++i) {
             aggregateRecord = allRecords[i];
-            // jsonResponse += agg.deaggregateSync(aggregateRecord.kinesis, getRecordAsJson);
-            var deaggregatedList = deaggregate(aggregateRecord, false, getRecordAsJson);
-            jsonResponse += deaggregatedList.join(separator);
-            if (i != allRecords.length - 1) jsonResponse += separator;
+            // manually deaggregate records
+            var separatedRecords = deaggregate(aggregateRecord, false, getRecordAsJson);
+            // filter the records only if the filter was asked for in the URL query params
+            if (query.contactId) {
+                separatedRecords = separatedRecords.filter(function (record) {
+                    var contactId = parseInt(query.contactId);
+                    try {
+                        // holy cow this is ugly. i wish people knew how to design json correctly.
+                        // since there can be two different contact IDs, check them both.
+                        // but look out! if there's no value it'll look like {key: null} while having a value looks like {key: {long: ###}}
+                        var contactObj = record.baseEventData["com.incontact.datainfra.events.ContactEvent"].mediaScopeIdentification.contactIdentification;
+                        return (contactObj.contactId && contactObj.contactId.long === contactId) ||
+                            (contactObj.contactIdAlt && contactObj.contactIdAlt.long === contactId);
+                    } catch (err) {
+                        return false;
+                    }
+                });
+            }
+            if (query.agentId) {
+                separatedRecords = separatedRecords.filter(function (record) {
+                    var agentId = parseInt(query.agentId);
+                    try {
+                        var agentIdObj = record.baseEventData["com.incontact.datainfra.events.AgentEvent"].agentShiftIdentification.agentIdentification;
+                        return (agentIdObj.agentId && agentIdObj.agentId.long === agentId) ||
+                            (agentIdObj.agentIdAlt && agentIdObj.agentIdAlt.long === agentId);
+                    } catch (err) {
+                        return false;
+                    }
+                });
+            }
+            if (query.serverName) {
+                separatedRecords = separatedRecords.filter(function (record) {
+                    try {
+                        return record.tenantId.serverName.string.toLowerCase() === query.serverName.toLowerCase();
+                    } catch (err) {
+                        return false;
+                    }
+                });
+            }
+            // combine lists
+            Array.prototype.push.apply(deaggregatedList, separatedRecords);
         }
-        jsonResponse += ']';
     }
+
     //console.log('Ganesh Your Final data is :  '+jsonResponse);
-    if (jsonResponse != '[]') {
+    if (deaggregatedList.length !== 0) {
         response.writeHead(200, { "Content-Type": "application/json" });
-        response.write(jsonResponse);
+        response.write(JSON.stringify(deaggregatedList));
     }
     else {
         response.writeHead(200, { "Content-Type": "text/plain" });
-        response.write("Stream " + query.streamname + " exists, but there were no records found in it.");
+        response.write("Stream " + query.streamname + " exists, but there were no records found in it with your specified params.");
     }
     response.end();
 }
@@ -203,7 +254,7 @@ var getRecordAsJson = function (err, singleRecord) {
     if (!err) {
         // foreach
         var entry = new Buffer(singleRecord.data, 'base64').toString();
-        var entryAsJson = entry;
+        var entryAsJson = JSON.parse(entry);
         // entryAsJson += ',{"break": "---------------------------------------------------End Of Record---------------------------------------------------"}';
         return entryAsJson;
     }
