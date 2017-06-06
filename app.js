@@ -26,6 +26,8 @@ app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
 
 // set the default kinesis route (will allow alternate routes in the future and block invalid routes)
 app.get('/', function (req, res) {
+    console.log(new Date() + '\n*****NEW REQUEST*****: ' + req.url);
+    
     // quick sanity check for the user on query params
     // make sure required query params are in query
     var requiredQueryCheck = requiredQueryParams.filter(function (queryParam) {
@@ -61,8 +63,6 @@ app.listen(4000);
 console.log('Listening on Port 4000....');
 
 var processRequest = function (req) {
-    console.log('New Request received: ' + req.url);
-
     query = url.parse(req.url, true).query;
 
     // calculate the timestamp based on the passed duration
@@ -272,7 +272,7 @@ var getRecordAsJson = function (err, singleRecord) {
         try {
             return JSON.parse(entry);
         } catch (ex) {
-            console.log("invalid json:\n" + entry);
+            return {"INVALID JSON": entry}
         }
     }
 };
