@@ -1,4 +1,7 @@
 var http = require('http');
+var favicon = require('serve-favicon')
+var path = require('path')
+var finalhandler = require('finalhandler')
 var deagg = require('aws-kinesis-agg/kpl-deagg');
 var url = require('url');
 var common = require('./resources/common');
@@ -15,32 +18,33 @@ var AggregatedRecord = common.loadBuilder();
 
 
 // -------------- NODE SERVER --------------
+var _favicon = favicon(path.join(__dirname, 'public', 'favicon.ico'));
+
 var app = http.createServer(function (req, res) {
-    // control for favicon - ignore it! but you can also add the image in here if you want one
-    if (req.url === '/favicon.ico') {
-        res.writeHead(200, { 'Content-Type': 'image/x-icon' });
-        res.end();
-        console.log('favicon requested & ignored');
-        return;
-    }
+    // this extra stuff is to allow serving of the favicon.
+    // if we don't serve a favicon, we have to explicitly ignore it (which then means the browser doens't cache it, and we keep getting requests for it)
+    var done = finalhandler(req, res);
+    _favicon(req, res, function (err) {
+        if (err) return done(err);
 
-    // quick sanity check for the user on query params
-    var queryCheck = Object.keys(url.parse(req.url, true).query);
-    // filter out any allowed query params to see if there are disallowed params
-    queryCheck = queryCheck.filter(function(q) { 
-        return allowedQueryParams.indexOf(q) < 0;
+        // quick sanity check for the user on query params
+        var queryCheck = Object.keys(url.parse(req.url, true).query);
+        // filter out any allowed query params to see if there are disallowed params
+        queryCheck = queryCheck.filter(function (q) {
+            return allowedQueryParams.indexOf(q) < 0;
+        });
+        if (queryCheck.length > 0) {
+            res.setHeader('Content-type', 'text/plain');
+            res.write("The following query parameters are not recognized:\n" + queryCheck);
+            res.end();
+            console.log('bad query params');
+            return;
+        }
+
+        var params = processRequest(req);
+        response = res;
+        setResponse(params);
     });
-    if (queryCheck.length > 0) {
-        res.setHeader('Content-type', 'text/plain');
-        res.write("The following query parameters are not recognized:\n" + queryCheck);
-        res.end();
-        console.log('bad query params');
-        return;
-    }
-
-    var params = processRequest(req);
-    response = res;
-    setResponse(params);
 });
 app.listen(4000);
 console.log('Listening on Port 4000....');
@@ -245,7 +249,7 @@ var deaggregate = function (kinesisRecord, computeChecksums, perRecordCallback, 
             sequenceNumber: kinesisRecord.SequenceNumber,
             data: kinesisRecord.Data
         });
-        records.push(record);
+        if (record) records.push(record);
     }
     return records;
 };
@@ -254,8 +258,10 @@ var getRecordAsJson = function (err, singleRecord) {
     if (!err) {
         // foreach
         var entry = new Buffer(singleRecord.data, 'base64').toString();
-        var entryAsJson = JSON.parse(entry);
-        // entryAsJson += ',{"break": "---------------------------------------------------End Of Record---------------------------------------------------"}';
-        return entryAsJson;
+        try {
+            return JSON.parse(entry);
+        } catch (ex) {
+            console.log("invalid json:\n" + entry);
+        }
     }
 };
