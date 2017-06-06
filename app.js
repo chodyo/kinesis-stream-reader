@@ -1,7 +1,6 @@
-var http = require('http');
-var favicon = require('serve-favicon')
-var path = require('path')
-var finalhandler = require('finalhandler')
+var express = require('express');
+var favicon = require('serve-favicon');
+var path = require('path');
 var deagg = require('aws-kinesis-agg/kpl-deagg');
 var url = require('url');
 var common = require('./resources/common');
@@ -10,7 +9,9 @@ var kinesis = require('./secrets').getKinesis();
 // global variable to allow query params to be accessable from all functions
 var query;
 // allowed query params: duration, streamname, contactId, agentId, serverName
-var allowedQueryParams = ["duration", "streamname", "contactId", "agentId", "serverName"]
+var allowedQueryParams = ["duration", "streamname", "contactId", "agentId", "serverName"];
+// required query params: streamname
+var requiredQueryParams = ["streamname"]
 // global variable to make the response accessable anywhere
 var response;
 // global AggregatedRecord object which will hold the protocol buffer model
@@ -18,39 +19,49 @@ var AggregatedRecord = common.loadBuilder();
 
 
 // -------------- NODE SERVER --------------
-var _favicon = favicon(path.join(__dirname, 'public', 'favicon.ico'));
+var app = express();
 
-var app = http.createServer(function (req, res) {
-    // this extra stuff is to allow serving of the favicon.
-    // if we don't serve a favicon, we have to explicitly ignore it (which then means the browser doens't cache it, and we keep getting requests for it)
-    var done = finalhandler(req, res);
-    _favicon(req, res, function (err) {
-        if (err) return done(err);
+// set the favicon route
+app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
 
-        // quick sanity check for the user on query params
-        var queryCheck = Object.keys(url.parse(req.url, true).query);
-        // filter out any allowed query params to see if there are disallowed params
-        queryCheck = queryCheck.filter(function (q) {
-            return allowedQueryParams.indexOf(q) < 0;
-        });
-        if (queryCheck.length > 0) {
-            res.setHeader('Content-type', 'text/plain');
-            res.write("The following query parameters are not recognized:\n" + queryCheck);
-            res.end();
-            console.log('bad query params');
-            return;
-        }
-
-        var params = processRequest(req);
-        response = res;
-        setResponse(params);
+// set the default kinesis route (will allow alternate routes in the future and block invalid routes)
+app.get('/', function (req, res) {
+    // quick sanity check for the user on query params
+    // make sure required query params are in query
+    var requiredQueryCheck = requiredQueryParams.filter(function (queryParam) {
+        return req.query[queryParam] === undefined;
     });
+    if (requiredQueryCheck.length > 0) {
+        res.setHeader('Content-type', 'text/plain');
+        res.write("The following query parameters are required:\n" + requiredQueryCheck);
+        res.end();
+        console.log('missing required query params: ' + requiredQueryCheck);
+        return;
+    }
+    // ensure all params are allowed (this is probably optional, but will help prevent typos)
+    var queryCheck = Object.getOwnPropertyNames(req.query).filter(function (queryParam) {
+        return allowedQueryParams.indexOf(queryParam) < 0;
+    });
+    if (queryCheck.length > 0) {
+        res.setHeader('Content-type', 'text/plain');
+        res.write("The following query parameters are not recognized:\n" + queryCheck);
+        res.end();
+        console.log('bad query params: ' + queryCheck);
+        return;
+    }
+
+    // params seem good, dive into AWS stuff
+    var params = processRequest(req);
+    response = res;
+    setResponse(params);
 });
+
+// start the server
 app.listen(4000);
 console.log('Listening on Port 4000....');
 
 var processRequest = function (req) {
-    console.log('YES!!!!!!!!! New Request received: ' + req.url);
+    console.log('New Request received: ' + req.url);
 
     query = url.parse(req.url, true).query;
 
