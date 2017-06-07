@@ -59,8 +59,8 @@ app.get('/', function (req, res) {
 });
 
 // start the server
-app.listen(4001);
-console.log('Listening on Port 4001....');
+app.listen(4000);
+console.log('Listening on Port 4000....');
 
 var processRequest = function (req) {
     query = url.parse(req.url, true).query;
