@@ -59,15 +59,15 @@ app.get('/', function (req, res) {
 });
 
 // start the server
-app.listen(4000);
-console.log('Listening on Port 4000....');
+app.listen(4001);
+console.log('Listening on Port 4001....');
 
 var processRequest = function (req) {
     query = url.parse(req.url, true).query;
 
     // calculate the timestamp based on the passed duration
-    timeAgoInSeconds = query.duration * 60;
-    time = Math.floor(Date.now() / 1000) - timeAgoInSeconds;
+    timeAgoInMilliseconds = query.duration * 60 * 1000;
+    time = new Date(Date.now() - timeAgoInMilliseconds);
 
     return {
         ShardId: '0', /* required */
