@@ -25,7 +25,7 @@ var app = express();
 app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
 
 // set the default kinesis route (will allow alternate routes in the future and block invalid routes)
-app.get('/', function (req, res) {
+app.get('/records', function (req, res) {
     console.log(new Date() + '\n*****NEW REQUEST*****: ' + req.url);
     
     // quick sanity check for the user on query params
