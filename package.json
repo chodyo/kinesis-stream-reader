@@ -4,8 +4,11 @@
   "description": "reads records from kinesis stream using api",
   "main": "app.js",
   "dependencies": {
+    "aws-kinesis-agg": "^2.2.2",
     "aws-sdk": "^2.59.0",
-    "aws-kinesis-agg": "^2.2.2"
+    "express": "^4.15.3",
+    "path": "^0.12.7",
+    "serve-favicon": "^2.4.3"
   },
   "devDependencies": {},
   "scripts": {
