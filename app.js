@@ -63,9 +63,9 @@ var processRequest = function (query) {
         ShardId: '0', /* required */
         ShardIteratorType: 'AT_TIMESTAMP', /* required */
         Timestamp: time,
-        StreamName: query.streamname,
-    }
-}
+        StreamName: query.streamname
+    };
+};
 
 var getResponse = function (params, query, response) {
 
@@ -85,7 +85,7 @@ var getResponse = function (params, query, response) {
             response.setHeader('Content-type', 'text/plain');
             response.write("Invalid stream: " + query.streamname + "\nOR I've no clue whats going on.");
         })
-        .then(function (e) {
+        .then(function () {
             response.end();
         });
 };

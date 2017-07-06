@@ -13,13 +13,13 @@ module.exports = function () {
                 getRecords(data.ShardIterator, deaggregatedList, query, resolve, reject);
             } else {
                 var msg = "No Shard Iterator received";
-                console.log();
+                console.log(msg);
                 reject(msg);
             }
         }
         else {
             console.log(err, err.stack);
-            var msg = "Invalid stream OR I've no clue whats going on.";
+            msg = "Invalid stream OR I've no clue whats going on.";
             console.log(msg);
             reject(msg);
         }
