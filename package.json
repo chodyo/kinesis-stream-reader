@@ -6,6 +6,7 @@
   "dependencies": {
     "aws-kinesis-agg": "^2.2.2",
     "aws-sdk": "^2.59.0",
+    "debug": "^2.6.8",
     "express": "^4.15.3",
     "path": "^0.12.7",
     "serve-favicon": "^2.4.3"

@@ -1,3 +1,4 @@
+var debug = require('debug')('KSR:app');
 var express = require('express');
 var favicon = require('serve-favicon');
 var path = require('path');
@@ -5,9 +6,9 @@ var url = require('url');
 var kinesis = require('./kinesis-reader');
 
 // allowed query params: duration, streamname, contactId, agentId, serverName
-var allowedQueryParams = ["duration", "streamname", "contactId", "agentId", "serverName"];
+var allowedQueryParams = ["duration", "streamname", "contactId", "agentId", "serverName", "tenantId"];
 // required query params: streamname
-var requiredQueryParams = ["streamname"]
+var requiredQueryParams = ["streamname"];
 
 
 // -------------- NODE SERVER --------------
@@ -18,7 +19,7 @@ app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
 
 // set the default kinesis route (will allow alternate routes in the future and block invalid routes)
 app.get('/records', function (req, res) {
-    console.log(new Date() + '\n*****NEW REQUEST*****: ' + req.url);
+    debug(new Date() + '\n*****NEW REQUEST*****: ' + req.url);
 
     // quick sanity check for the user on query params
     // make sure required query params are in query
@@ -29,7 +30,7 @@ app.get('/records', function (req, res) {
         res.setHeader('Content-type', 'text/plain');
         res.write("The following query parameters are required:\n" + requiredQueryCheck);
         res.end();
-        console.log('missing required query params: ' + requiredQueryCheck);
+        debug('missing required query params: ' + requiredQueryCheck);
         return;
     }
     // ensure all params are allowed (this is probably optional, but will help prevent typos)
@@ -40,7 +41,7 @@ app.get('/records', function (req, res) {
         res.setHeader('Content-type', 'text/plain');
         res.write("The following query parameters are not recognized:\n" + queryCheck);
         res.end();
-        console.log('bad query params: ' + queryCheck);
+        debug('bad query params: ' + queryCheck);
         return;
     }
 
@@ -52,11 +53,15 @@ app.get('/records', function (req, res) {
 
 // start the server
 app.listen(4000);
-console.log('Listening on Port 4000....');
+debug('Listening on Port 4000....');
 
 var processRequest = function (query) {
     // calculate the timestamp based on the passed duration
-    var timeAgoInMilliseconds = query.duration * 60 * 1000;
+    // put a (hopefully temporary?) hard cap on duration of 960 minutes (8 hours) to avoid getting wrecked
+    var maxDuration = 960; 
+    var duration = Math.min(query.duration, maxDuration);
+    if (query.duration > maxDuration) debug("Limiting duration to " + maxDuration + ".");
+    var timeAgoInMilliseconds = duration * 60 * 1000;
     var time = new Date(Date.now() - timeAgoInMilliseconds);
 
     return {
@@ -71,6 +76,7 @@ var getResponse = function (params, query, response) {
 
     kinesis.getRecords(params, query)
         .then(function (deaggregatedList) {
+            debug("Returning " + deaggregatedList.length + " records.");
             if (deaggregatedList.length !== 0) {
                 response.writeHead(200, { "Content-Type": "application/json" });
                 response.write(JSON.stringify(deaggregatedList));
@@ -81,7 +87,7 @@ var getResponse = function (params, query, response) {
             }
         })
         .catch(function (e) {
-            console.log(e, e.stack);
+            debug(e, e.stack);
             response.setHeader('Content-type', 'text/plain');
             response.write("Invalid stream: " + query.streamname + "\nOR I've no clue whats going on.");
         })

@@ -2,6 +2,7 @@ var kinesis = require('./secrets').getKinesis();
 var deagg = require('aws-kinesis-agg/kpl-deagg');
 var common = require('./resources/common');
 var AggregatedRecord = common.loadBuilder();
+var debug = require('debug')('KSR:kr');
 
 module.exports = function () {
 
@@ -13,14 +14,14 @@ module.exports = function () {
                 getRecords(data.ShardIterator, deaggregatedList, query, resolve, reject);
             } else {
                 var msg = "No Shard Iterator received";
-                console.log(msg);
+                debug(msg);
                 reject(msg);
             }
         }
         else {
-            console.log(err, err.stack);
+            debug(err, err.stack);
             msg = "Invalid stream OR I've no clue whats going on.";
-            console.log(msg);
+            debug(msg);
             reject(msg);
         }
     };
@@ -77,6 +78,18 @@ module.exports = function () {
                         }
                     });
                 }
+                if (query.tenantId) {
+                    separatedRecords = separatedRecords.filter(function (record) {
+                        var tenantId = parseInt(query.tenantId);
+                        try {
+                            var tenantIdObj = record.tenantId;
+                            return (tenantIdObj.tenantId && tenantIdObj.tenantId.long === tenantId) ||
+                                (tenantIdObj.tenantIdAlt && tenantIdObj.tenantIdAlt.long === tenantId);
+                        } catch (err) {
+                            return false;
+                        }
+                    });
+                }
                 // combine lists
                 Array.prototype.push.apply(deaggregatedList, separatedRecords);
             }
@@ -89,7 +102,7 @@ module.exports = function () {
                 getRecords(data.NextShardIterator, deaggregatedList, query, resolve, reject);
             }
         } else {
-            console.log(err);
+            debug(err);
         }
     }
 
@@ -127,21 +140,15 @@ module.exports = function () {
                     // validate that the checksum is correct for the transmitted
                     // data
                     if (calculatedChecksum !== recordChecksum) {
-                        if (debug) {
-                            console.log("Record Checksum: " + recordChecksum);
-                            console.log("Calculated Checksum: " + calculatedChecksum);
-                        }
+                        debug("Record Checksum: " + recordChecksum);
+                        debug("Calculated Checksum: " + calculatedChecksum);
                         throw new Error("Invalid record checksum");
                     }
                 } else {
-                    if (debug) {
-                        console.log("WARN: Record Checksum Verification turned off");
-                    }
+                    debug("WARN: Record Checksum Verification turned off");
                 }
 
-                if (debug) {
-                    console.log("Found " + protobufMessage.records.length + " KPL Encoded Messages");
-                }
+                debug("Found " + protobufMessage.records.length + " KPL Encoded Messages");
 
                 // iterate over each User Record in order
                 for (var i = 0; i < protobufMessage.records.length; i++) {
@@ -168,9 +175,7 @@ module.exports = function () {
             // the same interface as if it was. Customers can differentiate KPL
             // user records vs plain Kinesis Records on the basis of the
             // sub-sequence number
-            if (debug) {
-                console.log("WARN: Non KPL Aggregated Message Processed for DeAggregation: " + kinesisRecord.partitionKey + "-" + kinesisRecord.sequenceNumber);
-            }
+            debug("WARN: Non KPL Aggregated Message Processed for DeAggregation: " + kinesisRecord.partitionKey + "-" + kinesisRecord.sequenceNumber);
             var record = perRecordCallback(null, {
                 partitionKey: kinesisRecord.PartitionKey,
                 // explicitPartitionKey : kinesisRecord.explicitPartitionKey,
