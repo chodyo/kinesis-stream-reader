@@ -6,7 +6,7 @@ var url = require('url');
 var kinesis = require('./kinesis-reader');
 
 // allowed query params: duration, streamname, contactId, agentId, serverName
-var allowedQueryParams = ["duration", "streamname", "contactId", "agentId", "serverName", "tenantId"];
+var allowedQueryParams = ["duration", "streamname", "contactId", "agentId", "serverName", "tenantId", "agentShiftId"];
 // required query params: streamname
 var requiredQueryParams = ["streamname"];
 
