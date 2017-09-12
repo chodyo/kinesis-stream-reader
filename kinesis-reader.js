@@ -90,6 +90,18 @@ module.exports = function () {
                         }
                     });
                 }
+                if (query.agentShiftId) {
+                    var agentShiftId = parseInt(query.agentShiftId);
+                    separatedRecords = separatedRecords.filter(function (record) {
+                        try {
+                            var agentShiftIdObj = record.baseEventData["com.incontact.datainfra.events.AgentEvent"].agentShiftIdentification;
+                            return (agentShiftIdObj.agentShiftId && agentShiftIdObj.agentShiftId.long === agentShiftId) ||
+                                (agentShiftIdObj.agentShiftIdAlt && agentShiftIdObj.agentShiftIdAlt.long === agentShiftId);
+                        } catch (err) {
+                            return false;
+                        }
+                    });
+                }
                 // combine lists
                 Array.prototype.push.apply(deaggregatedList, separatedRecords);
             }
