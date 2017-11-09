@@ -1,8 +1,7 @@
 div#form {
     height:39%;
     width:100%;
-    background-color:#404;
-    color: white;
+    background-color:rgb(129, 129, 129);
 }
 
 pre#data {
