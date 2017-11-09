@@ -1,5 +1,6 @@
 var debug = require('debug')('KSR:app');
 var express = require('express');
+var cors = require('cors');
 var favicon = require('serve-favicon');
 var path = require('path');
 var url = require('url');
@@ -13,6 +14,7 @@ var requiredQueryParams = ["streamname"];
 
 // -------------- NODE SERVER --------------
 var app = express();
+app.use(cors());
 
 // set the favicon route
 app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));

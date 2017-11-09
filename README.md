@@ -21,7 +21,7 @@ will return all messages sent in the last 10 minutes from the *example-stream* s
 Once you have nodejs and npm, download the kinesis stream reader and install all the dependencies in this project:
 ```bash
 # download the Kinesis Stream Reader project
-git clone https://github.com/chody-h/kinesis-stream-reader.git && cd kinesis-stream-reader
+git clone https://github.com/chody-h/kinesis-stream-reader.git && cd kinesis-stream-reader/app/server
 # download project dependencies
 npm install
 ```
