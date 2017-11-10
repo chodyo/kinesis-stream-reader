@@ -9,6 +9,7 @@ pre#data {
     width:100%;
     border-color: #333;
     border-radius: 0;
+    padding: 1em 2em;
 }
 
 html,body {

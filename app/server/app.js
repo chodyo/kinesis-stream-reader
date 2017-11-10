@@ -29,6 +29,7 @@ app.get('/records', function (req, res) {
         return req.query[queryParam] === undefined;
     });
     if (requiredQueryCheck.length > 0) {
+        res.statusCode = 400;
         res.setHeader('Content-type', 'text/plain');
         res.write("The following query parameters are required:\n" + requiredQueryCheck);
         res.end();
@@ -40,6 +41,7 @@ app.get('/records', function (req, res) {
         return allowedQueryParams.indexOf(queryParam) < 0;
     });
     if (queryCheck.length > 0) {
+        res.statusCode = 400;
         res.setHeader('Content-type', 'text/plain');
         res.write("The following query parameters are not recognized:\n" + queryCheck);
         res.end();
@@ -90,7 +92,7 @@ var getResponse = function (params, query, response) {
         })
         .catch(function (e) {
             debug(e, e.stack);
-            response.setHeader('Content-type', 'text/plain');
+            response.writeHead(400, { 'Content-type': 'text/plain'});
             response.write("Invalid stream: " + query.streamname + "\nOR I've no clue whats going on.");
         })
         .then(function () {

@@ -2,60 +2,41 @@ var asString = function (data) {
     return JSON.stringify(data, null, 4);
 };
 
+var updateData = function (data) {
+    // debugger;
+    $('#data').text(data);
+    $('#data').removeClass('prettyprinted');
+    PR.prettyPrint();
+};
+
 var getJson = function (e) {
 
     // inform the user we're trying
-    var loading = asString({ "status": "loading" });
-    $('#data').text(data);
+    var loading = asString({ 'status': 'loading' });
+    updateData(loading);
 
     // get user input & validate
-    var url = $('#url').val();
+    var url = $('#url').val() + 'records';
     var stream = $('#streamname').val();
-    var time = $('#time').val();
-
-    // convert the time value from a datetime to the number of minutes that have passed
-    var diff = new Date() - new Date(time);
-    var duration = Math.floor((diff / 1000) / 60);
+    var time = $('#minutes').val();
 
     // get data
-    url = new URL(url, "http://localhost:4000");
-    url.searchParams.append("streamname", stream);
-    url.searchParams.append("duration", time);
-    
+    url = new URL(url, 'http://localhost:4000/records');
+    url.searchParams.append('streamname', stream);
+    url.searchParams.append('duration', time);
+    console.log(url);
     $.getJSON(url)
         .done(function (data) {
             data = asString(data);
-            $('#data').text(data);
+            updateData(data);
         })
         .fail(function (res, error) {
             var errorText = res.statusText;
-            if (errorText === "error") {
-                errorText = "could not connect to server";
+            if (errorText === 'error') {
+                errorText = 'could not connect to server';
             }
-            data = asString({ "status": errorText });
-            $('#data').text(data);
-        })
-        .always(function () {
-            $('#data').removeClass("prettyprinted");
-            PR.prettyPrint();
+            data = asString({ 'status': errorText });
+            console.log('errored out', data);
+            updateData(data);
         });
 };
-
-var setDefaultTime = function () {
-    var tenMinutesInMilliseconds = 1000 * 60 * 10;
-    var tenMinsAgo = new Date(new Date() - tenMinutesInMilliseconds)
-        .toISOString()
-        .slice(0, -5);
-    console.log(tenMinsAgo);
-    document.getElementById('time').value = tenMinsAgo;
-    document.getElementById('time').defaultValue = tenMinsAgo;
-};
-
-$(function () {
-    // setDefaultTime();
-
-    $('#time').datetimepicker({
-        locale: 'pt-br',
-        maxDate: moment().subtract("minutes", 10)
-      });
-});
