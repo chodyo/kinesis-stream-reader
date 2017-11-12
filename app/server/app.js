@@ -3,47 +3,66 @@ const express = require('express');
 const cors = require('cors');
 const favicon = require('serve-favicon');
 const path = require('path');
-const url = require('url');
 const kinesis = require('./kinesis-reader');
 
 
-//////////////////////////////////////////////////////////////
-// --------------------- node server ------------------------
-////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+//---------------------------- node server ------------------------------------
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-const app = express();
-app.use(cors());
-app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
+const kinesisStreamReader = function (port = 4000) {
+    const app = express();
+    app.use(cors());
+    app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
+    app.get('/records', recordsRoute);
+    app.listen(port);
+    debug(`Listening on Port ${port}....`);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//----------------------------- responses -------------------------------------
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
 
-//////////////////////////////////////////////////////////////
-// ---------------------- responses -------------------------
-////////////////////////////////////////////////////////////
-
-const invalidRequestResponse = function (res, message = null, headers = {}) {
-    res.statusCode = 400;
-    if (message) {
-        res.setHeader('Content-type', 'text/plain');
-        Object.keys(headers).forEach(function (key) {
-            res.setHeader(key, headers[key]);
-        });
-        res.write(message);
+const Responses = {
+    /**
+     * @param   {Object}                    res
+     *          The same response object created in the NodeJS route handler.
+     * @param   {*}                         [message]
+     *          Whatever description you want to send to the user in the body of
+     *          the response. No body will be sent if no message is defined.
+     * @param   {Object.<string, string>}   [headers]
+     *          Key-Value pairs of HTTP headers that will be sent with the
+     *          response.
+     */
+    invalidRequestResponse: function (res, message = null, headers = {}) {
+        res.statusCode = 400;
+        if (message) {
+            // this.setHeader('Content-type', 'text/plain');
+            res.write(JSON.stringify(message));
+        }
+        if (Object.keys(headers).length !== 0) {
+            Object.keys(headers).forEach(function (key) {
+                res.setHeader(key, headers[key]);
+            });
+        }
     }
 };
 
-//////////////////////////////////////////////////////////////
-// ------------------- query parameters ---------------------
-////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
+//-------------------------- query parameters ---------------------------------
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
 /**
- * @typedef     {Object}    QueryParamSchema
- * @property    {string[]}  schema.allowed      
- *              A list of all valid query parameters. 
- * @property    {string[]}  schema.required        
- *              A list of all required query parameters. 
+ * @typedef     {Object}        QueryParamSchema
+ * @property    {Set<string>}   schema.allowed
+ *              A set of all valid query parameters.
+ * @property    {string[]}      schema.required
+ *              A list of all required query parameters. Should overlap allowed.
  */
 const schema = {
-    allowed: [
+    allowed: new Set([
         'duration',
         'streamname',
         'contactId',
@@ -51,7 +70,7 @@ const schema = {
         'serverName',
         'tenantId',
         'agentShiftId'
-    ],
+    ]),
     required: [
         'streamname'
     ]
@@ -59,75 +78,82 @@ const schema = {
 
 /**
  * @typedef     {Object}    QueryParamValidator
- * @property    {bool}      goodRequest
- *              Indicates whether or not the parameters given are valid and in 
- *              the correct form.
- * @property    {string[]}  missingRequiredParams
+ * @property    {boolean}   badRequest
+ *              Indicates if the parameters given are invalid or in the
+ *              incorrect form.
+ * @property    {string[]}  [missingRequiredParams]
  *              All parameters that should have been in the request but weren't.
- * @property    {string[]}  invalidParams
+ * @property    {string[]}  [invalidParams]
  *              All parameters that were given and not recognized.
  */
 /**
  * Ensures all required query params exist, and all existing params are valid.
- * @param   {QueryParamSchema}  schema                   
+ * @param   {QueryParamSchema}  schema
  *          The query parameter schema.
- * @param   {string[]}          requestParams          
- *          A list of all given query parameters for a request. 
- * @return  {QueryParamValidator}            
+ * @param   {Object}            requestParams
+ *          An object containing a property for each query string parameter in
+ *          the route. If there is no query string, it is the empty object, {}.
+ * @return  {QueryParamValidator}
  *          Whether or not query params were valid and reasons why the query
  *          params were invalid, if applicable.
  */
-const validateQueryParams = function (schema, requestParams) {
+const validateQueryParams = function (schema, reqParams) {
     // initialize return value
     const ret = {};
-    ret.goodRequest = true;
+    ret.badRequest = false;
 
-    // find missing params
+    // iterate over schema.required, ensuring that every required param is in
+    // the requestParams object
     const required = schema.required.filter(function (param) {
-        return requestParams[param] === undefined;
+        return reqParams[param] === undefined;
     });
-    if (required) {
-        ret.goodRequest = false;
+    // if any required attributes were not listed as parameters, that's an error
+    if (required.length > 0) {
+        ret.badRequest = true;
         ret.missingRequiredParams = required;
     }
 
-    // ensure all params are allowed (this is probably optional, but will help prevent typos)
-    var invalidQueryParams = Object.getOwnPropertyNames(requestParams).filter(
-        function (param) {
-            return requestParams[allowed].indexOf(param) < 0;
-        }
-    );
-    if (invalidQueryParams) {
-        ret.goodRequest = false;
+    // iterate over the requestParams object, getting every attribute contained
+    // therein. this is probably optional, but will help fix typos.
+    var invalidQueryParams = Object.keys(reqParams).filter(function (param) {
+        // include the attribute if the parameter is not enumerated in the set
+        return !schema.allowed.has(param);
+    });
+    // if any attributes were not specified as allowed params, that's an error
+    if (invalidQueryParams.length > 0) {
+        ret.badRequest = true;
         ret.invalidParams = invalidQueryParams;
     }
 
     return ret;
 }
 
-//////////////////////////////////////////////////////////////
-// ----------------------- routes ---------------------------
-////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
+//-------------------------------- routes -------------------------------------
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
 
-// set the default kinesis route (will allow alternate routes in the future and block invalid routes)
-app.get('/records', function (req, res) {
+// set the default kinesis stream reader route
+const recordsRoute = function (req, res) {
     debug(new Date() + ': ' + req.url);
 
     // quick sanity check for the user on query params
     // make sure required query params are in query
-    debug("res type: " + typeof (res));
+    const paramStatus = validateQueryParams(schema, req.query);
+    debug('param status =', JSON.stringify(paramStatus));
+    if (paramStatus.badRequest) {
+        Responses.invalidRequestResponse(res, paramStatus);
+        res.end();
+        return;
+    }
 
 
     // params seem good, dive into AWS stuff
-    var query = url.parse(req.url, true).query;
-    var params = processRequest(query);
-    getResponse(params, query, res);
-});
-
-// start the server
-app.listen(4000);
-debug('Listening on Port 4000....');
+    // var query = url.parse(req.url, true).query;
+    var params = processRequest(req.query);
+    getResponse(params, req.query, res);
+}
 
 var processRequest = function (query) {
     // calculate the timestamp based on the passed duration
@@ -169,3 +195,5 @@ var getResponse = function (params, query, response) {
             response.end();
         });
 };
+
+kinesisStreamReader();
