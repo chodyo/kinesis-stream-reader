@@ -19,11 +19,14 @@ const kinesisStreamReader = function (port = 4000) {
     debug(`Listening on Port ${port}....`);
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////
 //----------------------------- responses -------------------------------------
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-
+/**
+ * Container object for all responses the KSR will return.
+ */
 const Responses = {
     /**
      * @param   {Object}                    res
@@ -35,8 +38,7 @@ const Responses = {
      *          Key-Value pairs of HTTP headers that will be sent with the
      *          response.
      */
-    invalidRequestResponse: function (res, message = null, headers = {}) {
-        res.statusCode = 400;
+    _base: function(res, message, headers) {
         if (message) {
             // this.setHeader('Content-type', 'text/plain');
             res.write(JSON.stringify(message));
@@ -46,6 +48,20 @@ const Responses = {
                 res.setHeader(key, headers[key]);
             });
         }
+    },
+    /**
+     * @augments Responses.base
+     */
+    invalidRequest: function (res, message = null, headers = {}) {
+        res.statusCode = 400;
+        this._base(res, message, headers);
+    },
+    /**
+     * @augments Responses.base
+     */
+    ok: function (res, message = null, headers = {}) {
+        res.statusCode = 200;
+        this._base(res, message, headers);
     }
 };
 
@@ -130,70 +146,98 @@ const validateQueryParams = function (schema, reqParams) {
 
 
 ////////////////////////////////////////////////////////////////////////////////
+//--------------------------------- utils -------------------------------------
+//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+/**
+ * Get the epoch timestamp from some number of minutes ago. This must be in the
+ * form of a JS Date() object. I've never been able to get the AWS SDK to work
+ * with just the Unix timestamp value.
+ * @param {number} [minutes=10]
+ * No record should be older than this number of mins.
+ * @returns {Date}
+ * The number of ms that has passed in UTC since the epoch.
+ */
+const getEpochTimestamp = function (minutes = 10) {
+    // calculate the unix timestamp based on the passed duration
+    // 960 minutes = 8 hours
+    var maxMinutes = 960;
+    var minutesInMilliseconds = Math.min(minutes, maxMinutes) * 60 * 1000;
+    debug(minutesInMilliseconds, Date.now(), new Date(Date.now() - minutesInMilliseconds));
+    return new Date(Date.now() - minutesInMilliseconds);
+}
+
+/**
+ * Parameter object for the [AWS SDK getShardIterator]
+ * {@link http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/Kinesis.html#getShardIterator-property}
+ * operation.
+ * @typedef AwsData
+ * @property {string} StreamName
+ * The name of the Amazon Kinesis stream.
+ * @property {string} ShardId
+ * The shard ID of the Amazon Kinesis shard to get the iterator for.
+ * @property {string} ShardIteratorType
+ * Determines how the shard iterator is used to start reading data records from
+ * the shard.
+ * @property {Date} Timestamp
+ * The timestamp of the data record from which to start reading. If a record
+ * with this exact timestamp does not exist, the iterator returned is for the
+ * next (later) record.
+ */
+/**
+ * Parameterizes data from the request into an AwsData object.
+ * @param {string} stream
+ * Name of the AWS Kinesis stream.
+ * @param {Date} oldestRecord
+ * Records should be more recent than this timestamp.
+ * @returns {AwsData}
+ */
+const getAwsData = function (stream, oldestRecord) {
+    return {
+        ShardId: '0', /* required */
+        ShardIteratorType: 'AT_TIMESTAMP', /* required */
+        StreamName: stream, /* required */
+        Timestamp: oldestRecord
+    };
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
 //-------------------------------- routes -------------------------------------
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-
 // set the default kinesis stream reader route
 const recordsRoute = function (req, res) {
-    debug(new Date() + ': ' + req.url);
-
     // quick sanity check for the user on query params
     // make sure required query params are in query
     const paramStatus = validateQueryParams(schema, req.query);
     debug('param status =', JSON.stringify(paramStatus));
     if (paramStatus.badRequest) {
-        Responses.invalidRequestResponse(res, paramStatus);
+        Responses.invalidRequest(res, paramStatus);
         res.end();
         return;
     }
 
-
     // params seem good, dive into AWS stuff
-    // var query = url.parse(req.url, true).query;
-    var params = processRequest(req.query);
-    getResponse(params, req.query, res);
-}
+    const awsParams = getAwsData(
+        req.query.streamname,
+        getEpochTimestamp(req.query.duration)
+    );
 
-var processRequest = function (query) {
-    // calculate the timestamp based on the passed duration
-    // put a (hopefully temporary?) hard cap on duration of 960 minutes (8 hours) to avoid getting wrecked
-    var maxDuration = 960;
-    var duration = Math.min(query.duration, maxDuration);
-    if (query.duration > maxDuration) debug('Limiting duration to ' + maxDuration + '.');
-    var timeAgoInMilliseconds = duration * 60 * 1000;
-    var time = new Date(Date.now() - timeAgoInMilliseconds);
 
-    return {
-        ShardId: '0', /* required */
-        ShardIteratorType: 'AT_TIMESTAMP', /* required */
-        Timestamp: time,
-        StreamName: query.streamname
-    };
-};
-
-var getResponse = function (params, query, response) {
-
-    kinesis.getRecords(params, query)
+    kinesis.getRecords(awsParams, req.query)
         .then(function (deaggregatedList) {
             debug('Returning ' + deaggregatedList.length + ' records.');
-            if (deaggregatedList.length !== 0) {
-                response.writeHead(200, { 'Content-Type': 'application/json' });
-                response.write(JSON.stringify(deaggregatedList));
-            }
-            else {
-                response.writeHead(200, { 'Content-Type': 'text/plain' });
-                response.write('Stream ' + query.streamname + ' exists, but there were no records found in it with your specified params.');
-            }
+            Responses.ok(res, deaggregatedList);
         })
         .catch(function (e) {
             debug(e, e.stack);
-            response.writeHead(400, { 'Content-type': 'text/plain' });
-            response.write('Invalid stream: ' + query.streamname + '\nOR I have no clue whats going on.');
+            res.writeHead(400, { 'Content-type': 'text/plain' });
+            res.write('Invalid stream: ' + req.query.streamname + '\nOR I have no clue whats going on.');
         })
         .then(function () {
-            response.end();
+            res.end();
         });
-};
+}
 
 kinesisStreamReader();
