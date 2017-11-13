@@ -8,27 +8,9 @@ module.exports = function () {
 
     // private parts
 
-    var afterShardIterator = function (deaggregatedList, query, resolve, reject, err, data) {
-        if (!err) {
-            if (data.ShardIterator != '') {
-                getRecords(data.ShardIterator, deaggregatedList, query, resolve, reject);
-            } else {
-                var msg = "No Shard Iterator received";
-                debug(msg);
-                reject(msg);
-            }
-        }
-        else {
-            debug(err, err.stack);
-            msg = "Invalid stream OR I've no clue whats going on.";
-            debug(msg);
-            reject(msg);
-        }
-    };
-
     var getRecords = function (shardIterator, deaggregatedList, query, resolve, reject) {
         params = {
-            ShardIterator: shardIterator, /* required */
+            ShardIterator: shardIterator,
             Limit: 100
         };
         kinesis.getRecords(params, getRecordsCallback.bind(this, deaggregatedList, query, resolve, reject));
@@ -152,15 +134,15 @@ module.exports = function () {
                     // validate that the checksum is correct for the transmitted
                     // data
                     if (calculatedChecksum !== recordChecksum) {
-                        debug("Record Checksum: " + recordChecksum);
-                        debug("Calculated Checksum: " + calculatedChecksum);
+                        // debug("Record Checksum: " + recordChecksum);
+                        // debug("Calculated Checksum: " + calculatedChecksum);
                         throw new Error("Invalid record checksum");
                     }
                 } else {
-                    debug("WARN: Record Checksum Verification turned off");
+                    // debug("WARN: Record Checksum Verification turned off");
                 }
 
-                debug("Found " + protobufMessage.records.length + " KPL Encoded Messages");
+                // debug("Found " + protobufMessage.records.length + " KPL Encoded Messages");
 
                 // iterate over each User Record in order
                 for (var i = 0; i < protobufMessage.records.length; i++) {
@@ -187,7 +169,7 @@ module.exports = function () {
             // the same interface as if it was. Customers can differentiate KPL
             // user records vs plain Kinesis Records on the basis of the
             // sub-sequence number
-            debug("WARN: Non KPL Aggregated Message Processed for DeAggregation: " + kinesisRecord.partitionKey + "-" + kinesisRecord.sequenceNumber);
+            // debug("WARN: Non KPL Aggregated Message Processed for DeAggregation: " + kinesisRecord.partitionKey + "-" + kinesisRecord.sequenceNumber);
             var record = perRecordCallback(null, {
                 partitionKey: kinesisRecord.PartitionKey,
                 // explicitPartitionKey : kinesisRecord.explicitPartitionKey,
@@ -211,6 +193,21 @@ module.exports = function () {
         }
     };
 
+    // exceptions
+    // https://stackoverflow.com/questions/464359/custom-exceptions-in-javascript
+    function InvalidStreamNameException(message) {
+        this.message = message;
+        if ("captureStackTrace" in Error) {
+            Error.captureStackTrace(this, InvalidStreamNameException);
+        }
+        else {
+            this.stack = (new Error()).stack;
+        }
+    }
+    InvalidStreamNameException.prototype = Object.create(Error.prototype);
+    InvalidStreamNameException.prototype.name = "InvalidStreamNameException";
+    InvalidStreamNameException.prototype.constructor = InvalidStreamNameException;
+
     // public parts
     return {
         getRecords: function (params, query) {
@@ -218,6 +215,23 @@ module.exports = function () {
                 function (resolve, reject) {
                     var deaggregatedList = [];
                     kinesis.getShardIterator(params, afterShardIterator.bind(this, deaggregatedList, query, resolve, reject));
+                }
+            );
+        },
+
+        // try something new
+        getShardIterator: function (params) {
+            return new Promise(
+                function (resolve, reject) {
+                    var deaggregatedList = [];
+                    kinesis.getShardIterator(params, function (err, data) {
+                        if (err) {
+                            reject(new InvalidStreamNameException());
+                        }
+                        else {
+                            resolve(data.ShardIterator);
+                        }
+                    });
                 }
             );
         }

@@ -29,6 +29,7 @@ const kinesisStreamReader = function (port = 4000) {
  */
 const Responses = {
     /**
+     * Will set responses as desired AND END!!!!
      * @param   {Object}                    res
      *          The same response object created in the NodeJS route handler.
      * @param   {*}                         [message]
@@ -38,7 +39,7 @@ const Responses = {
      *          Key-Value pairs of HTTP headers that will be sent with the
      *          response.
      */
-    _base: function(res, message, headers) {
+    _base: function (res, message, headers) {
         if (message) {
             // this.setHeader('Content-type', 'text/plain');
             res.write(JSON.stringify(message));
@@ -48,6 +49,7 @@ const Responses = {
                 res.setHeader(key, headers[key]);
             });
         }
+        res.end();
     },
     /**
      * @augments Responses.base
@@ -120,9 +122,8 @@ const validateQueryParams = function (schema, reqParams) {
 
     // iterate over schema.required, ensuring that every required param is in
     // the requestParams object
-    const required = schema.required.filter(function (param) {
-        return reqParams[param] === undefined;
-    });
+    const required =
+        schema.required.filter(param => { reqParams[param] === undefined; });
     // if any required attributes were not listed as parameters, that's an error
     if (required.length > 0) {
         ret.badRequest = true;
@@ -131,10 +132,9 @@ const validateQueryParams = function (schema, reqParams) {
 
     // iterate over the requestParams object, getting every attribute contained
     // therein. this is probably optional, but will help fix typos.
-    var invalidQueryParams = Object.keys(reqParams).filter(function (param) {
-        // include the attribute if the parameter is not enumerated in the set
-        return !schema.allowed.has(param);
-    });
+    var invalidQueryParams =
+        Object.keys(reqParams).filter(param => { !schema.allowed.has(param); });
+
     // if any attributes were not specified as allowed params, that's an error
     if (invalidQueryParams.length > 0) {
         ret.badRequest = true;
@@ -162,9 +162,8 @@ const getEpochTimestamp = function (minutes = 10) {
     // calculate the unix timestamp based on the passed duration
     // 960 minutes = 8 hours
     var maxMinutes = 960;
-    var minutesInMilliseconds = Math.min(minutes, maxMinutes) * 60 * 1000;
-    debug(minutesInMilliseconds, Date.now(), new Date(Date.now() - minutesInMilliseconds));
-    return new Date(Date.now() - minutesInMilliseconds);
+    var minsInMs = Math.min(minutes, maxMinutes) * 60 * 1000;
+    return new Date(Date.now() - minsInMs);
 }
 
 /**
@@ -194,9 +193,9 @@ const getEpochTimestamp = function (minutes = 10) {
  */
 const getAwsData = function (stream, oldestRecord) {
     return {
-        ShardId: '0', /* required */
-        ShardIteratorType: 'AT_TIMESTAMP', /* required */
-        StreamName: stream, /* required */
+        ShardId: '0',
+        ShardIteratorType: 'AT_TIMESTAMP',
+        StreamName: stream,
         Timestamp: oldestRecord
     };
 }
@@ -214,7 +213,6 @@ const recordsRoute = function (req, res) {
     debug('param status =', JSON.stringify(paramStatus));
     if (paramStatus.badRequest) {
         Responses.invalidRequest(res, paramStatus);
-        res.end();
         return;
     }
 
@@ -224,19 +222,44 @@ const recordsRoute = function (req, res) {
         getEpochTimestamp(req.query.duration)
     );
 
+    // kinesis.getRecords(awsParams, req.query)
+    //     .then(deaggregatedList => {
+    //         debug('Returning ' + deaggregatedList.length + ' records.');
+    //         Responses.ok(res, deaggregatedList);
+    //     })
+    //     .catch(e => {
+    //         debug(e, e.stack);
+    //         res.writeHead(400, { 'Content-type': 'text/plain' });
+    //         res.write('Invalid stream: ' + req.query.streamname + '\nOR I have no clue whats going on.');
+    //     })
+    //     .then(() => res.end());
 
-    kinesis.getRecords(awsParams, req.query)
-        .then(function (deaggregatedList) {
-            debug('Returning ' + deaggregatedList.length + ' records.');
-            Responses.ok(res, deaggregatedList);
+    // exception
+    function UnhandledServerException(message) {
+        this.message = message;
+        Error.captureStackTrace(this, UnhandledServerException);
+    }
+    UnhandledServerException.prototype = Object.create(Error.prototype);
+    UnhandledServerException.prototype.name = "UnhandledServerException";
+    UnhandledServerException.prototype.constructor = UnhandledServerException;
+
+    // try something new
+    kinesis.getShardIterator(awsParams)
+        .then(shardIterator => {
+            debug("shardIterator: ", shardIterator);
+            if (!shardIterator) {
+                // never seen this get called so i don't know the circumstances
+                throw new UnhandledServerException("Shard iterator is empty.");
+            }
+            return shardIterator;
         })
-        .catch(function (e) {
-            debug(e, e.stack);
-            res.writeHead(400, { 'Content-type': 'text/plain' });
-            res.write('Invalid stream: ' + req.query.streamname + '\nOR I have no clue whats going on.');
-        })
-        .then(function () {
-            res.end();
+        .catch(e => {
+            const body = {
+                badRequest: true,
+                error: e.toString()
+            };
+            debug(body);
+            Responses.invalidRequest(res, body);
         });
 }
 
