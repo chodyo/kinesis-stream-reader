@@ -17,7 +17,7 @@ const kinesisStreamReader = function (port = 4000) {
     app.get('/records', recordsRoute);
     app.listen(port);
     debug(`Listening on Port ${port}....`);
-}
+};
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -32,10 +32,10 @@ const Responses = {
      * Will set responses as desired AND END!!!!
      * @param   {Object}                    res
      *          The same response object created in the NodeJS route handler.
-     * @param   {*}                         [message]
+     * @param   {*}                         message
      *          Whatever description you want to send to the user in the body of
      *          the response. No body will be sent if no message is defined.
-     * @param   {Object.<string, string>}   [headers]
+     * @param   {Object.<string, string>}   headers
      *          Key-Value pairs of HTTP headers that will be sent with the
      *          response.
      */
@@ -142,7 +142,7 @@ const validateQueryParams = function (schema, reqParams) {
     }
 
     return ret;
-}
+};
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -164,7 +164,7 @@ const getEpochTimestamp = function (minutes = 10) {
     var maxMinutes = 960;
     var minsInMs = Math.min(minutes, maxMinutes) * 60 * 1000;
     return new Date(Date.now() - minsInMs);
-}
+};
 
 /**
  * Parameter object for the [AWS SDK getShardIterator]
@@ -198,12 +198,22 @@ const getAwsData = function (stream, oldestRecord) {
         StreamName: stream,
         Timestamp: oldestRecord
     };
-}
+};
 
 
 ////////////////////////////////////////////////////////////////////////////////
 //-------------------------------- routes -------------------------------------
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+
+// exception
+function NoShardIteratorException(message) {
+    this.message = message;
+    Error.captureStackTrace(this, NoShardIteratorException);
+}
+NoShardIteratorException.prototype = Object.create(Error.prototype);
+NoShardIteratorException.prototype.name = "NoShardIteratorException";
+NoShardIteratorException.prototype.constructor = NoShardIteratorException;
 
 // set the default kinesis stream reader route
 const recordsRoute = function (req, res) {
@@ -222,27 +232,6 @@ const recordsRoute = function (req, res) {
         getEpochTimestamp(req.query.duration)
     );
 
-    // kinesis.getRecords(awsParams, req.query)
-    //     .then(deaggregatedList => {
-    //         debug('Returning ' + deaggregatedList.length + ' records.');
-    //         Responses.ok(res, deaggregatedList);
-    //     })
-    //     .catch(e => {
-    //         debug(e, e.stack);
-    //         res.writeHead(400, { 'Content-type': 'text/plain' });
-    //         res.write('Invalid stream: ' + req.query.streamname + '\nOR I have no clue whats going on.');
-    //     })
-    //     .then(() => res.end());
-
-    // exception
-    function NoShardIteratorException(message) {
-        this.message = message;
-        Error.captureStackTrace(this, NoShardIteratorException);
-    }
-    NoShardIteratorException.prototype = Object.create(Error.prototype);
-    NoShardIteratorException.prototype.name = "NoShardIteratorException";
-    NoShardIteratorException.prototype.constructor = NoShardIteratorException;
-
     // try something new
     kinesis.getShardIterator(awsParams)
         .then(shardIterator => {
@@ -251,12 +240,36 @@ const recordsRoute = function (req, res) {
                 // never seen this get called so i don't know the circumstances
                 throw new NoShardIteratorException();
             }
-            // next step in the promise chain
-            return kinesis.getRecords(shardIterator, req.query);
+
+            return new Promise((resolve, reject) => {
+                let keepGoing = true;
+                let rawRecords = [];
+                while (keepGoing) {
+                    kinesis.getRecords(shardIterator)
+                        .then(promiseResult => {
+                            rawRecords = rawRecords.append(promiseResult.Records);
+                            if (promiseResult.MillisBehindLatest > 0 || promiseResult.Records.length > 0) {
+                                shardIterator = promiseResult.NextShardIterator;
+                            }
+                            else {
+                                keepGoing = false;
+                            }
+                        });
+                }
+                resolve(rawRecords);
+            });
+            
         })
-        .then(records => {
-            debug("records:", records);
-            Responses.ok(res, records);
+        .then(rawRecords => {
+            let deaggregatedRecords = [];
+            data.Records.forEach(aggregatedRecord => {
+                let separatedRecords = kinesis.deaggregate(aggregatedRecord, false, getRecordJson);
+                separatedRecords = kinesis.filterRecords(query, separatedRecords);
+                deaggregatedRecords = deaggregatedRecords.concat(separatedRecords);
+            });
+
+            debug("records:", deaggregatedRecords.length);
+            Responses.ok(res, deaggregatedRecords);
         })
         .catch(err => {
             const body = {
@@ -266,7 +279,15 @@ const recordsRoute = function (req, res) {
             debug(body);
             Responses.invalidRequest(res, body);
         });
+};
 
-}
+const getRecordJson = function (data) {
+    const entry = new Buffer(data, 'base64').toString();
+    try {
+        return JSON.parse(entry);
+    } catch (ex) {
+        return { "INVALID JSON": entry };
+    }
+};
 
 kinesisStreamReader();

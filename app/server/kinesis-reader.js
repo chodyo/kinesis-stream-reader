@@ -1,21 +1,73 @@
 const kinesis = require('./secrets').getKinesis();
 const deagg = require('aws-kinesis-agg/kpl-deagg');
 const common = require('./resources/common');
-const AggregatedRecord = common.loadBuilder();
+let AggregatedRecord = common.loadBuilder();
 const debug = require('debug')('KSR:kr');
 
 module.exports = function () {
 
-    // private parts
+    // public parts
+    return {
+        // based off of https://github.com/awslabs/kinesis-aggregation/blob/master/node/node_modules/aws-kinesis-agg/kpl-deagg.js
+        deaggregate: function (kinesisRecord, computeChecksums, perRecordParse) {
+            /* jshint -W069 */ // suppress warnings about dot notation (use of
+            // underscores in protobuf model)
+            //
+            // we receive the record data as a base64 encoded string
+            const recordBuffer = new Buffer(kinesisRecord.Data, 'base64');
+            let records = [];
 
-    const recursivelyParseData = function (data, query) {
-        let deaggregatedList = [];
-        data.Records.forEach((aggregateRecord) => {
+            // first 4 bytes are the kpl assigned magic number
+            // https://github.com/awslabs/amazon-kinesis-producer/blob/master/aggregation-format.md
+            if (recordBuffer.slice(0, 4).toString('hex') === kplConfig[useKplVersion].magicNumber) {
+                try {
+                    // decode the protobuf binary from byte offset 4 to length-16 (last
+                    // 16 are checksum)
+                    const protobufMessage = AggregatedRecord.decode(recordBuffer.slice(4, recordBuffer.length - 16));
 
-            // manually deaggregate records
-            const separatedRecords = deaggregate(aggregateRecord, false, getRecordAsJson);
+                    // extract the kinesis record checksum
+                    const recordChecksum = recordBuffer.slice(recordBuffer.length - 16, recordBuffer.length).toString('base64');
 
+                    if (computeChecksums === true) {
+                        // compute a checksum from the serialised protobuf message
+                        const md5 = crypto.createHash('md5');
+                        md5.update(recordBuffer.slice(4, recordBuffer.length - 16));
+                        const calculatedChecksum = md5.digest('base64');
 
+                        // validate that the checksum is correct for the transmitted
+                        // data
+                        if (calculatedChecksum !== recordChecksum) {
+                            // debug("Record Checksum: " + recordChecksum);
+                            // debug("Calculated Checksum: " + calculatedChecksum);
+                            throw new Error("Invalid record checksum");
+                        }
+                    }
+
+                    // iterate over each User Record in order
+                    for (let i = 0; i < protobufMessage.records.length; i++) {
+                        const item = protobufMessage.records[i];
+
+                        // emit the per-record callback with the extracted partition
+                        // keys and sequence information
+                        const record = perRecordParse(item.data.toString('base64'));
+                        records.push(record);
+                    }
+                } catch (e) {
+                }
+            }
+            else {
+                // not a KPL encoded message - no biggie - emit the record with
+                // the same interface as if it was. Customers can differentiate KPL
+                // user records vs plain Kinesis Records on the basis of the
+                // sub-sequence number
+                // debug("WARN: Non KPL Aggregated Message Processed for DeAggregation: " + kinesisRecord.partitionKey + "-" + kinesisRecord.sequenceNumber);
+                const record = perRecordParse(kinesisRecord.Data);
+                if (record) records.push(record);
+            }
+            return records;
+        },
+
+        filterRecords: function (query, separatedRecords) {
             // filter the records only if the filter was asked for in the URL query params
             if (query.contactId) {
                 separatedRecords = separatedRecords.filter(function (record) {
@@ -77,140 +129,11 @@ module.exports = function () {
                     }
                 });
             }
+            return separatedRecords;
+        },
 
-
-            // combine lists
-            deaggregatedList = deaggregatedList.concat(separatedRecords);
-            // Array.prototype.push.apply(deaggregatedList, separatedRecords);
-        });
-
-        // if we're not up to date or there are more records being posted, get more records
-        // TODO: why do we need the length check??
-        if (data.MillisBehindLatest !== 0 || data.Records.length !== 0) {
-            module.exports.getRecords(data.NextShardIterator, query)
-                .then((records) => {
-                    deaggregatedList = deaggregatedList.concat(records);
-                });
-        }
-
-        return deaggregatedList;
-    }
-
-    // based off of https://github.com/awslabs/kinesis-aggregation/blob/master/node/node_modules/aws-kinesis-agg/kpl-deagg.js
-    const deaggregate = function (kinesisRecord, computeChecksums, perRecordCallback) {
-        "use strict";
-        /* jshint -W069 */ // suppress warnings about dot notation (use of
-        // underscores in protobuf model)
-        //
-        // we receive the record data as a base64 encoded string
-        const recordBuffer = new Buffer(kinesisRecord.Data, 'base64');
-        let records = [];
-
-        // first 4 bytes are the kpl assigned magic number
-        // https://github.com/awslabs/amazon-kinesis-producer/blob/master/aggregation-format.md
-        if (recordBuffer.slice(0, 4).toString('hex') === kplConfig[useKplVersion].magicNumber) {
-            try {
-                if (!AggregatedRecord) {
-                    AggregatedRecord = common.loadBuilder();
-                }
-
-                // decode the protobuf binary from byte offset 4 to length-16 (last
-                // 16 are checksum)
-                const protobufMessage = AggregatedRecord.decode(recordBuffer.slice(4, recordBuffer.length - 16));
-
-                // extract the kinesis record checksum
-                const recordChecksum = recordBuffer.slice(recordBuffer.length - 16, recordBuffer.length).toString('base64');
-
-                if (computeChecksums === true) {
-                    // compute a checksum from the serialised protobuf message
-                    const md5 = crypto.createHash('md5');
-                    md5.update(recordBuffer.slice(4, recordBuffer.length - 16));
-                    const calculatedChecksum = md5.digest('base64');
-
-                    // validate that the checksum is correct for the transmitted
-                    // data
-                    if (calculatedChecksum !== recordChecksum) {
-                        // debug("Record Checksum: " + recordChecksum);
-                        // debug("Calculated Checksum: " + calculatedChecksum);
-                        throw new Error("Invalid record checksum");
-                    }
-                } else {
-                    // debug("WARN: Record Checksum Verification turned off");
-                }
-
-                // debug("Found " + protobufMessage.records.length + " KPL Encoded Messages");
-
-                // iterate over each User Record in order
-                for (let i = 0; i < protobufMessage.records.length; i++) {
-                    try {
-                        const item = protobufMessage.records[i];
-
-                        // emit the per-record callback with the extracted partition
-                        // keys and sequence information
-                        const record = perRecordCallback(null, {
-                            partitionKey: protobufMessage["partition_key_table"][item["partition_key_index"]],
-                            explicitPartitionKey: protobufMessage["explicit_hash_key_table"][item["explicit_hash_key_index"]],
-                            sequenceNumber: kinesisRecord.sequenceNumber,
-                            subSequenceNumber: i,
-                            data: item.data.toString('base64')
-                        });
-                        records.push(record);
-                    } catch (e) {
-                    }
-                }
-            } catch (e) {
-            }
-        } else {
-            // not a KPL encoded message - no biggie - emit the record with
-            // the same interface as if it was. Customers can differentiate KPL
-            // user records vs plain Kinesis Records on the basis of the
-            // sub-sequence number
-            // debug("WARN: Non KPL Aggregated Message Processed for DeAggregation: " + kinesisRecord.partitionKey + "-" + kinesisRecord.sequenceNumber);
-            const record = perRecordCallback(null, {
-                partitionKey: kinesisRecord.PartitionKey,
-                // explicitPartitionKey : kinesisRecord.explicitPartitionKey,
-                sequenceNumber: kinesisRecord.SequenceNumber,
-                data: kinesisRecord.Data
-            });
-            if (record) records.push(record);
-        }
-        return records;
-    };
-
-    const getRecordAsJson = function (err, singleRecord) {
-        if (!err) {
-            // foreach
-            const entry = new Buffer(singleRecord.data, 'base64').toString();
-            try {
-                return JSON.parse(entry);
-            } catch (ex) {
-                return { "INVALID JSON": entry }
-            }
-        }
-    };
-
-    // exceptions
-    // https://stackoverflow.com/questions/464359/custom-exceptions-in-javascript
-    function InvalidStreamNameException(message) {
-        this.message = message;
-        Error.captureStackTrace(this, InvalidStreamNameException);
-    }
-    InvalidStreamNameException.prototype = Object.create(Error.prototype);
-    InvalidStreamNameException.prototype.name = "InvalidStreamNameException";
-    InvalidStreamNameException.prototype.constructor = InvalidStreamNameException;
-    function CannotGetRecordsException(message) {
-        this.message = message;
-        Error.captureStackTrace(this, CannotGetRecordsException);
-    }
-    CannotGetRecordsException.prototype = Object.create(Error.prototype);
-    CannotGetRecordsException.prototype.name = "CannotGetRecordsException";
-    CannotGetRecordsException.prototype.constructor = CannotGetRecordsException;
-
-    // public parts
-    return {
         getShardIterator: function (params) {
             return new Promise((resolve, reject) => {
-                let deaggregatedList = [];
                 kinesis.getShardIterator(params, (err, data) => {
                     if (err) {
                         reject(new InvalidStreamNameException());
@@ -233,11 +156,50 @@ module.exports = function () {
                         reject(new CannotGetRecordsException("Try again?"));
                     }
                     else {
-                        const records = recursivelyParseData(data, query);
-                        resolve(records);
+                        // const records = parseData(data, query);
+                        resolve(data);
                     }
                 });
             });
+        },
+
+        parseData: function (data, query) {
+            let deaggregatedList = [];
+            data.Records.forEach((aggregateRecord) => {
+                // manually deaggregate records
+                let separatedRecords = deaggregate(aggregateRecord, false, getRecordAsJson);
+                separatedRecords = filterRecords(query);
+                // combine lists
+                deaggregatedList = deaggregatedList.concat(separatedRecords);
+                // Array.prototype.push.apply(deaggregatedList, separatedRecords);
+            });
+
+            // if we're not up to date or there are more records being posted, get more records
+            // TODO: why do we need the length check??
+            if (data.MillisBehindLatest !== 0 || data.Records.length !== 0) {
+                module.exports.getRecords(data.NextShardIterator, query)
+                    .then((records) => {
+                        deaggregatedList = deaggregatedList.concat(records);
+                    });
+            }
+            return deaggregatedList;
         }
     };
 }();
+
+// exceptions
+// https://stackoverflow.com/questions/464359/custom-exceptions-in-javascript
+function InvalidStreamNameException(message) {
+    this.message = message;
+    Error.captureStackTrace(this, InvalidStreamNameException);
+}
+InvalidStreamNameException.prototype = Object.create(Error.prototype);
+InvalidStreamNameException.prototype.name = "InvalidStreamNameException";
+InvalidStreamNameException.prototype.constructor = InvalidStreamNameException;
+function CannotGetRecordsException(message) {
+    this.message = message;
+    Error.captureStackTrace(this, CannotGetRecordsException);
+}
+CannotGetRecordsException.prototype = Object.create(Error.prototype);
+CannotGetRecordsException.prototype.name = "CannotGetRecordsException";
+CannotGetRecordsException.prototype.constructor = CannotGetRecordsException;

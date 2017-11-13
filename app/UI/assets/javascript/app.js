@@ -40,3 +40,13 @@ var getJson = function (e) {
             updateData(data);
         });
 };
+
+var setDefaultUrl = function () {
+    var url = window.location.origin;
+    $('#url').val(url);
+    console.log(url);
+};
+
+$(function () {
+    setDefaultUrl();
+});
