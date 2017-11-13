@@ -235,32 +235,38 @@ const recordsRoute = function (req, res) {
     //     .then(() => res.end());
 
     // exception
-    function UnhandledServerException(message) {
+    function NoShardIteratorException(message) {
         this.message = message;
-        Error.captureStackTrace(this, UnhandledServerException);
+        Error.captureStackTrace(this, NoShardIteratorException);
     }
-    UnhandledServerException.prototype = Object.create(Error.prototype);
-    UnhandledServerException.prototype.name = "UnhandledServerException";
-    UnhandledServerException.prototype.constructor = UnhandledServerException;
+    NoShardIteratorException.prototype = Object.create(Error.prototype);
+    NoShardIteratorException.prototype.name = "NoShardIteratorException";
+    NoShardIteratorException.prototype.constructor = NoShardIteratorException;
 
     // try something new
     kinesis.getShardIterator(awsParams)
         .then(shardIterator => {
-            debug("shardIterator: ", shardIterator);
+            debug("shardIterator:", shardIterator);
             if (!shardIterator) {
                 // never seen this get called so i don't know the circumstances
-                throw new UnhandledServerException("Shard iterator is empty.");
+                throw new NoShardIteratorException();
             }
-            return shardIterator;
+            // next step in the promise chain
+            return kinesis.getRecords(shardIterator, req.query);
         })
-        .catch(e => {
+        .then(records => {
+            debug("records:", records);
+            Responses.ok(res, records);
+        })
+        .catch(err => {
             const body = {
                 badRequest: true,
-                error: e.toString()
+                error: err.toString()
             };
             debug(body);
             Responses.invalidRequest(res, body);
         });
+
 }
 
 kinesisStreamReader();
