@@ -4,75 +4,120 @@ const common = require('./resources/common');
 let AggregatedRecord = common.loadBuilder();
 const debug = require('debug')('KSR:kr');
 
-module.exports = function () {
-    // public parts
-    return {
-        getRecords: function (streamname, timestamp) {
-            return new Promise((resolve, reject) => {
-                // 1. get the first shard iterator (kinesis.getShardIterator)
-                let getShardIteratorInput = getAwsData(streamname, timestamp);
-                kinesis.getShardIterator(getShardIteratorInput, (err, data) => {
-                    if (err) {
-                        reject(new InvalidStreamNameException());
-                    }
-                    else {
-                        resolve(data.ShardIterator);
-                    }
-                });
-            }).then(shardIterator => {
+module.exports = {
+    getRecords: getRecords
+};
 
+async function getRecords(streamname, timestamp) {
+    // 1. get the first shard iterator (kinesis.getShardIterator)
+    let shardIteratorInput = getAwsData(streamname, timestamp);
+    let shardIterator = await getShardIterator(shardIteratorInput);
 
-                // 2. get data from the current shard iterator (kinesis.getRecords)
-                let waitingForResponse = false;
-                let data = [];
-                while (true) {
-                    if (!waitingForResponse) {
-                        waitingForResponse = true;
-                        const getRecordsInput = {
-                            ShardIterator: shardIterator,
-                            Limit: 100 // TODO: evaluate this value
-                        };
-                        kinesis.getRecords(getRecordsInput, (err, response) => {
-                            if (err) {
-                                reject(new CannotGetRecordsException("Try again?\n" + err.toString()));
-                            }
-                            // 2.5 add all data from amazon to the data list
-                            data = data.concat(response.Records);
-
-                            // 3. if amazon returns us data with `MillisBehindLatest` greater than 0 or maybe if there are current records, go back to step 2
-                            if (response.MillisBehindLatest !== 0 || response.Records.length !== 0) {
-                                waitingForResponse = false;
-                                getRecordsInput.ShardIterator = response.NextShardIterator;
-                            }
-                            else {
-                                // 4. parse the data and return the records as a list
-                                return data;
-                            }
-                        });
-                    }
-                }
-            }).then(unparsedRecords => {
-                let deaggregatedList = [];
-                unparsedRecords.Records.forEach((aggregateRecord) => {
-                    // manually deaggregate records
-                    let separatedRecords = deaggregate(aggregateRecord, false, getRecordAsJson);
-                    separatedRecords = filterRecords(query);
-                    // combine lists
-                    deaggregatedList = deaggregatedList.concat(separatedRecords);
-                    // Array.prototype.push.apply(deaggregatedList, separatedRecords);
-                });
-
-                // if we're not up to date or there are more records being posted, get more records
-                // TODO: why do we need the length check??
-
-                return deaggregatedList;
-            });
-        }
+    // 2. get data from the current shard iterator (kinesis.getRecords)
+    // will be the accumulated data
+    let parsedRecords = [];
+    // variable to be changed by sequential calls
+    let getRecordsInput = {
+        ShardIterator: shardIterator,
+        Limit: 100
     };
-}();
+    while (getRecordsInput) {
+        const results = await getKinesisRecords(getRecordsInput);
+        // 2.5 add all data from amazon to the data list
+        // unparsedRecords = unparsedRecords.concat(results.Records);
+
+        results.Records.forEach(aggregateRecord => {
+            // manually deaggregate records
+            let separatedRecords = deaggregate(aggregateRecord, false, getRecordAsJson);
+            // combine lists
+            parsedRecords = parsedRecords.concat(separatedRecords);
+            // Array.prototype.push.apply(deaggregatedList, separatedRecords);
+        });
+        // 3. if amazon returns us data with `MillisBehindLatest` greater than 0 or maybe if there are current records, go back to step 2
+        // if we're not up to date or there are more records being posted, get more records
+        // TODO: why do we need the length check??
+        if (results.MillisBehindLatest !== 0 || results.Records.length !== 0) {
+            getRecordsInput.ShardIterator = results.NextShardIterator;
+        }
+        else {
+            getRecordsInput = null;
+        }
+    }
+
+    return parsedRecords;
+}
+
+/**
+ * Parameter object for the [AWS SDK getShardIterator]
+ * {@link http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/Kinesis.html#getShardIterator-property}
+ * operation.
+ * @typedef AwsData
+ * @property {string} StreamName
+ * The name of the Amazon Kinesis stream.
+ * @property {string} ShardId
+ * The shard ID of the Amazon Kinesis shard to get the iterator for.
+ * @property {string} ShardIteratorType
+ * Determines how the shard iterator is used to start reading data records from
+ * the shard.
+ * @property {Date} Timestamp
+ * The timestamp of the data record from which to start reading. If a record
+ * with this exact timestamp does not exist, the iterator returned is for the
+ * next (later) record.
+ */
+/**
+ * Parameterizes data from the request into an AwsData object.
+ * @param {string} stream
+ * Name of the AWS Kinesis stream.
+ * @param {Date} oldestRecord
+ * Records should be more recent than this timestamp.
+ * @returns {AwsData}
+ */
+function getAwsData(stream, oldestRecord) {
+    return {
+        ShardId: '0',
+        ShardIteratorType: 'AT_TIMESTAMP',
+        StreamName: stream,
+        Timestamp: oldestRecord
+    };
+}
+
+function getShardIterator(getShardIteratorInput) {
+    return new Promise((resolve, reject) => {
+        kinesis.getShardIterator(getShardIteratorInput, (err, data) => {
+            if (err) {
+                reject(new InvalidStreamNameException());
+            }
+            else {
+                resolve(data.ShardIterator);
+            }
+        });
+    });
+}
+
+
+function getKinesisRecords(getRecordsInput) {
+    return new Promise((resolve, reject) => {
+        kinesis.getRecords(getRecordsInput, function (err, data) {
+            if (err) {
+                promise = null;
+                reject(CannotGetRecordsException("Try again?\n" + err.toString()));
+            }
+            resolve(data);
+        });
+    });
+}
+
+function getRecordAsJson(data) {
+    const entry = new Buffer(data, 'base64').toString();
+    try {
+        return JSON.parse(entry);
+    } catch (ex) {
+        return { "INVALID JSON": entry };
+    }
+}
 
 // based off of https://github.com/awslabs/kinesis-aggregation/blob/master/node/node_modules/aws-kinesis-agg/kpl-deagg.js
-const deaggregate = function (kinesisRecord, computeChecksums, perRecordParse) {
+function deaggregate(kinesisRecord, computeChecksums, perRecordParse) {
     /* jshint -W069 */ // suppress warnings about dot notation (use of
     // underscores in protobuf model)
     //
@@ -128,106 +173,8 @@ const deaggregate = function (kinesisRecord, computeChecksums, perRecordParse) {
         if (record) records.push(record);
     }
     return records;
-};
+}
 
-const filterRecords = function (query, separatedRecords) {
-    // filter the records only if the filter was asked for in the URL query params
-    if (query.contactId) {
-        separatedRecords = separatedRecords.filter(function (record) {
-            const contactId = parseInt(query.contactId);
-            try {
-                // holy cow this is ugly. i wish people knew how to design json correctly.
-                // since there can be two different contact IDs, check them both.
-                // but look out! if there's no value it'll look like {key: null} while having a value looks like {key: {long: ###}}
-                const contactObj = record.baseEventData["com.incontact.datainfra.events.ContactEvent"].mediaScopeIdentification.contactIdentification;
-                return (contactObj.contactId && contactObj.contactId.long === contactId) ||
-                    (contactObj.contactIdAlt && contactObj.contactIdAlt.long === contactId);
-            } catch (err) {
-                return false;
-            }
-        });
-    }
-    if (query.agentId) {
-        separatedRecords = separatedRecords.filter(function (record) {
-            const agentId = parseInt(query.agentId);
-            try {
-                const agentIdObj = record.baseEventData["com.incontact.datainfra.events.AgentEvent"].agentShiftIdentification.agentIdentification;
-                return (agentIdObj.agentId && agentIdObj.agentId.long === agentId) ||
-                    (agentIdObj.agentIdAlt && agentIdObj.agentIdAlt.long === agentId);
-            } catch (err) {
-                return false;
-            }
-        });
-    }
-    if (query.serverName) {
-        separatedRecords = separatedRecords.filter(function (record) {
-            try {
-                return record.tenantId.serverName.string.toLowerCase() === query.serverName.toLowerCase();
-            } catch (err) {
-                return false;
-            }
-        });
-    }
-    if (query.tenantId) {
-        separatedRecords = separatedRecords.filter(function (record) {
-            const tenantId = parseInt(query.tenantId);
-            try {
-                const tenantIdObj = record.tenantId;
-                return (tenantIdObj.tenantId && tenantIdObj.tenantId.long === tenantId) ||
-                    (tenantIdObj.tenantIdAlt && tenantIdObj.tenantIdAlt.long === tenantId);
-            } catch (err) {
-                return false;
-            }
-        });
-    }
-    if (query.agentShiftId) {
-        const agentShiftId = parseInt(query.agentShiftId);
-        separatedRecords = separatedRecords.filter(function (record) {
-            try {
-                const agentShiftIdObj = record.baseEventData["com.incontact.datainfra.events.AgentEvent"].agentShiftIdentification;
-                return (agentShiftIdObj.agentShiftId && agentShiftIdObj.agentShiftId.long === agentShiftId) ||
-                    (agentShiftIdObj.agentShiftIdAlt && agentShiftIdObj.agentShiftIdAlt.long === agentShiftId);
-            } catch (err) {
-                return false;
-            }
-        });
-    }
-    return separatedRecords;
-};
-
-/**
- * Parameter object for the [AWS SDK getShardIterator]
- * {@link http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/Kinesis.html#getShardIterator-property}
- * operation.
- * @typedef AwsData
- * @property {string} StreamName
- * The name of the Amazon Kinesis stream.
- * @property {string} ShardId
- * The shard ID of the Amazon Kinesis shard to get the iterator for.
- * @property {string} ShardIteratorType
- * Determines how the shard iterator is used to start reading data records from
- * the shard.
- * @property {Date} Timestamp
- * The timestamp of the data record from which to start reading. If a record
- * with this exact timestamp does not exist, the iterator returned is for the
- * next (later) record.
- */
-/**
- * Parameterizes data from the request into an AwsData object.
- * @param {string} stream
- * Name of the AWS Kinesis stream.
- * @param {Date} oldestRecord
- * Records should be more recent than this timestamp.
- * @returns {AwsData}
- */
-const getAwsData = function (stream, oldestRecord) {
-    return {
-        ShardId: '0',
-        ShardIteratorType: 'AT_TIMESTAMP',
-        StreamName: stream,
-        Timestamp: oldestRecord
-    };
-};
 
 // exceptions
 // https://stackoverflow.com/questions/464359/custom-exceptions-in-javascript
@@ -253,11 +200,3 @@ NoShardIteratorException.prototype = Object.create(Error.prototype);
 NoShardIteratorException.prototype.name = "NoShardIteratorException";
 NoShardIteratorException.prototype.constructor = NoShardIteratorException;
 
-const getRecordJson = function (data) {
-    const entry = new Buffer(data, 'base64').toString();
-    try {
-        return JSON.parse(entry);
-    } catch (ex) {
-        return { "INVALID JSON": entry };
-    }
-};

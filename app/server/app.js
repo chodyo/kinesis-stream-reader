@@ -10,14 +10,14 @@ const kinesis = require('./kinesis-reader');
 //---------------------------- node server ------------------------------------
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-const kinesisStreamReader = function (port = 4000) {
+function kinesisStreamReader(port = 4000) {
     const app = express();
     app.use(cors());
     app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
     app.get('/records', recordsRoute);
     app.listen(port);
     debug(`Listening on Port ${port}....`);
-};
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -115,15 +115,15 @@ const schema = {
  *          Whether or not query params were valid and reasons why the query
  *          params were invalid, if applicable.
  */
-const validateQueryParams = function (schema, reqParams) {
+function validateQueryParams(schema, request) {
     // initialize return value
     const ret = {};
     ret.badRequest = false;
 
-    // iterate over schema.required, ensuring that every required param is in
-    // the requestParams object
-    const required =
-        schema.required.filter(param => { reqParams[param] === undefined; });
+    // find all required params that are not in the request
+    const required = schema.required.filter(required => {
+        return request[required] === undefined;
+    });
     // if any required attributes were not listed as parameters, that's an error
     if (required.length > 0) {
         ret.badRequest = true;
@@ -132,8 +132,9 @@ const validateQueryParams = function (schema, reqParams) {
 
     // iterate over the requestParams object, getting every attribute contained
     // therein. this is probably optional, but will help fix typos.
-    var invalidQueryParams =
-        Object.keys(reqParams).filter(param => { !schema.allowed.has(param); });
+    var invalidQueryParams = Object.keys(request).filter(param => {
+        return !schema.allowed.has(param);
+    });
 
     // if any attributes were not specified as allowed params, that's an error
     if (invalidQueryParams.length > 0) {
@@ -142,7 +143,7 @@ const validateQueryParams = function (schema, reqParams) {
     }
 
     return ret;
-};
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -158,13 +159,80 @@ const validateQueryParams = function (schema, reqParams) {
  * @returns {Date}
  * The number of ms that has passed in UTC since the epoch.
  */
-const getEpochTimestamp = function (minutes = 10) {
+function getEpochTimestamp(minutes = 10) {
     // calculate the unix timestamp based on the passed duration
     // 960 minutes = 8 hours
     var maxMinutes = 960;
     var minsInMs = Math.min(minutes, maxMinutes) * 60 * 1000;
     return new Date(Date.now() - minsInMs);
-};
+}
+
+
+
+function filterRecords(query, separatedRecords) {
+    // filter the records only if the filter was asked for in the URL query params
+    if (query.contactId) {
+        separatedRecords = separatedRecords.filter(function (record) {
+            const contactId = parseInt(query.contactId);
+            try {
+                // holy cow this is ugly. i wish people knew how to design json correctly.
+                // since there can be two different contact IDs, check them both.
+                // but look out! if there's no value it'll look like {key: null} while having a value looks like {key: {long: ###}}
+                const contactObj = record.baseEventData["com.incontact.datainfra.events.ContactEvent"].mediaScopeIdentification.contactIdentification;
+                return (contactObj.contactId && contactObj.contactId.long === contactId) ||
+                    (contactObj.contactIdAlt && contactObj.contactIdAlt.long === contactId);
+            } catch (err) {
+                return false;
+            }
+        });
+    }
+    if (query.agentId) {
+        separatedRecords = separatedRecords.filter(function (record) {
+            const agentId = parseInt(query.agentId);
+            try {
+                const agentIdObj = record.baseEventData["com.incontact.datainfra.events.AgentEvent"].agentShiftIdentification.agentIdentification;
+                return (agentIdObj.agentId && agentIdObj.agentId.long === agentId) ||
+                    (agentIdObj.agentIdAlt && agentIdObj.agentIdAlt.long === agentId);
+            } catch (err) {
+                return false;
+            }
+        });
+    }
+    if (query.serverName) {
+        separatedRecords = separatedRecords.filter(function (record) {
+            try {
+                return record.tenantId.serverName.string.toLowerCase() === query.serverName.toLowerCase();
+            } catch (err) {
+                return false;
+            }
+        });
+    }
+    if (query.tenantId) {
+        separatedRecords = separatedRecords.filter(function (record) {
+            const tenantId = parseInt(query.tenantId);
+            try {
+                const tenantIdObj = record.tenantId;
+                return (tenantIdObj.tenantId && tenantIdObj.tenantId.long === tenantId) ||
+                    (tenantIdObj.tenantIdAlt && tenantIdObj.tenantIdAlt.long === tenantId);
+            } catch (err) {
+                return false;
+            }
+        });
+    }
+    if (query.agentShiftId) {
+        const agentShiftId = parseInt(query.agentShiftId);
+        separatedRecords = separatedRecords.filter(function (record) {
+            try {
+                const agentShiftIdObj = record.baseEventData["com.incontact.datainfra.events.AgentEvent"].agentShiftIdentification;
+                return (agentShiftIdObj.agentShiftId && agentShiftIdObj.agentShiftId.long === agentShiftId) ||
+                    (agentShiftIdObj.agentShiftIdAlt && agentShiftIdObj.agentShiftIdAlt.long === agentShiftId);
+            } catch (err) {
+                return false;
+            }
+        });
+    }
+    return separatedRecords;
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,7 +241,7 @@ const getEpochTimestamp = function (minutes = 10) {
 
 
 // set the default kinesis stream reader route
-const recordsRoute = function (req, res) {
+function recordsRoute(req, res) {
     // quick sanity check for the user on query params
     // make sure required query params are in query
     const paramStatus = validateQueryParams(schema, req.query);
@@ -185,10 +253,11 @@ const recordsRoute = function (req, res) {
 
     const streamname = req.query.streamname;
     const timestamp = getEpochTimestamp(req.query.duration);
-    const records = kinesis.getRecords(streamname, timestamp)
+    kinesis.getRecords(streamname, timestamp)
         .then(records => {
-            debug("records:", records.length);
-            Responses.ok(res, records);
+            const filteredRecords = filterRecords(req.query, records);
+            debug("records:", filteredRecords.length);
+            Responses.ok(res, filteredRecords);
         })
         .catch(err => {
             const body = {
@@ -198,6 +267,6 @@ const recordsRoute = function (req, res) {
             debug(body);
             Responses.invalidRequest(res, body);
         });
-};
+}
 
 kinesisStreamReader();
