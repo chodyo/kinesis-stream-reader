@@ -10,35 +10,62 @@ module.exports = function () {
         getRecords: function (streamname, timestamp) {
             return new Promise((resolve, reject) => {
                 // 1. get the first shard iterator (kinesis.getShardIterator)
-                let awsParams = getAwsData(streamname, timestamp);
-                let shardIteratorPromise = new Promise((resolve, reject) => {
-                    kinesis.getShardIterator(params, (err, data) => {
-                        if (err) {
-                            reject(new InvalidStreamNameException());
-                        }
-                        else {
-                            resolve(data.ShardIterator);
-                        }
-                    });
+                let getShardIteratorInput = getAwsData(streamname, timestamp);
+                kinesis.getShardIterator(getShardIteratorInput, (err, data) => {
+                    if (err) {
+                        reject(new InvalidStreamNameException());
+                    }
+                    else {
+                        resolve(data.ShardIterator);
+                    }
                 });
+            }).then(shardIterator => {
+
+
                 // 2. get data from the current shard iterator (kinesis.getRecords)
-                let recordsPromise = new Promise((resolve, reject) => {
-                    const params = {
-                        ShardIterator: shardIterator,
-                        Limit: 100 // TODO: evaluate this value
-                    };
-                    kinesis.getRecords(params, (err, data) => {
-                        if (err) {
-                            reject(new CannotGetRecordsException("Try again?"));
-                        }
-                        else {
-                            // const records = parseData(data, query);
-                            resolve(data);
-                        }
-                    });
+                let waitingForResponse = false;
+                let data = [];
+                while (true) {
+                    if (!waitingForResponse) {
+                        waitingForResponse = true;
+                        const getRecordsInput = {
+                            ShardIterator: shardIterator,
+                            Limit: 100 // TODO: evaluate this value
+                        };
+                        kinesis.getRecords(getRecordsInput, (err, response) => {
+                            if (err) {
+                                reject(new CannotGetRecordsException("Try again?\n" + err.toString()));
+                            }
+                            // 2.5 add all data from amazon to the data list
+                            data = data.concat(response.Records);
+
+                            // 3. if amazon returns us data with `MillisBehindLatest` greater than 0 or maybe if there are current records, go back to step 2
+                            if (response.MillisBehindLatest !== 0 || response.Records.length !== 0) {
+                                waitingForResponse = false;
+                                getRecordsInput.ShardIterator = response.NextShardIterator;
+                            }
+                            else {
+                                // 4. parse the data and return the records as a list
+                                return data;
+                            }
+                        });
+                    }
+                }
+            }).then(unparsedRecords => {
+                let deaggregatedList = [];
+                unparsedRecords.Records.forEach((aggregateRecord) => {
+                    // manually deaggregate records
+                    let separatedRecords = deaggregate(aggregateRecord, false, getRecordAsJson);
+                    separatedRecords = filterRecords(query);
+                    // combine lists
+                    deaggregatedList = deaggregatedList.concat(separatedRecords);
+                    // Array.prototype.push.apply(deaggregatedList, separatedRecords);
                 });
-                // 3. if amazon returns us data with `MillisBehindLatest` greater than 0 or maybe if there are current records, go back to step 2
-                // 4. parse the data and return the records as a list
+
+                // if we're not up to date or there are more records being posted, get more records
+                // TODO: why do we need the length check??
+
+                return deaggregatedList;
             });
         }
     };
@@ -166,28 +193,6 @@ const filterRecords = function (query, separatedRecords) {
         });
     }
     return separatedRecords;
-};
-
-const parseData = function (data, query) {
-    let deaggregatedList = [];
-    data.Records.forEach((aggregateRecord) => {
-        // manually deaggregate records
-        let separatedRecords = deaggregate(aggregateRecord, false, getRecordAsJson);
-        separatedRecords = filterRecords(query);
-        // combine lists
-        deaggregatedList = deaggregatedList.concat(separatedRecords);
-        // Array.prototype.push.apply(deaggregatedList, separatedRecords);
-    });
-
-    // if we're not up to date or there are more records being posted, get more records
-    // TODO: why do we need the length check??
-    if (data.MillisBehindLatest !== 0 || data.Records.length !== 0) {
-        module.exports.getRecords(data.NextShardIterator, query)
-            .then((records) => {
-                deaggregatedList = deaggregatedList.concat(records);
-            });
-    }
-    return deaggregatedList;
 };
 
 /**
