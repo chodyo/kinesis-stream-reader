@@ -166,54 +166,11 @@ const getEpochTimestamp = function (minutes = 10) {
     return new Date(Date.now() - minsInMs);
 };
 
-/**
- * Parameter object for the [AWS SDK getShardIterator]
- * {@link http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/Kinesis.html#getShardIterator-property}
- * operation.
- * @typedef AwsData
- * @property {string} StreamName
- * The name of the Amazon Kinesis stream.
- * @property {string} ShardId
- * The shard ID of the Amazon Kinesis shard to get the iterator for.
- * @property {string} ShardIteratorType
- * Determines how the shard iterator is used to start reading data records from
- * the shard.
- * @property {Date} Timestamp
- * The timestamp of the data record from which to start reading. If a record
- * with this exact timestamp does not exist, the iterator returned is for the
- * next (later) record.
- */
-/**
- * Parameterizes data from the request into an AwsData object.
- * @param {string} stream
- * Name of the AWS Kinesis stream.
- * @param {Date} oldestRecord
- * Records should be more recent than this timestamp.
- * @returns {AwsData}
- */
-const getAwsData = function (stream, oldestRecord) {
-    return {
-        ShardId: '0',
-        ShardIteratorType: 'AT_TIMESTAMP',
-        StreamName: stream,
-        Timestamp: oldestRecord
-    };
-};
-
 
 ////////////////////////////////////////////////////////////////////////////////
 //-------------------------------- routes -------------------------------------
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-
-// exception
-function NoShardIteratorException(message) {
-    this.message = message;
-    Error.captureStackTrace(this, NoShardIteratorException);
-}
-NoShardIteratorException.prototype = Object.create(Error.prototype);
-NoShardIteratorException.prototype.name = "NoShardIteratorException";
-NoShardIteratorException.prototype.constructor = NoShardIteratorException;
 
 // set the default kinesis stream reader route
 const recordsRoute = function (req, res) {
@@ -226,50 +183,12 @@ const recordsRoute = function (req, res) {
         return;
     }
 
-    // params seem good, dive into AWS stuff
-    const awsParams = getAwsData(
-        req.query.streamname,
-        getEpochTimestamp(req.query.duration)
-    );
-
-    // try something new
-    kinesis.getShardIterator(awsParams)
-        .then(shardIterator => {
-            debug("shardIterator:", shardIterator);
-            if (!shardIterator) {
-                // never seen this get called so i don't know the circumstances
-                throw new NoShardIteratorException();
-            }
-
-            return new Promise((resolve, reject) => {
-                let keepGoing = true;
-                let rawRecords = [];
-                while (keepGoing) {
-                    kinesis.getRecords(shardIterator)
-                        .then(promiseResult => {
-                            rawRecords = rawRecords.append(promiseResult.Records);
-                            if (promiseResult.MillisBehindLatest > 0 || promiseResult.Records.length > 0) {
-                                shardIterator = promiseResult.NextShardIterator;
-                            }
-                            else {
-                                keepGoing = false;
-                            }
-                        });
-                }
-                resolve(rawRecords);
-            });
-            
-        })
-        .then(rawRecords => {
-            let deaggregatedRecords = [];
-            data.Records.forEach(aggregatedRecord => {
-                let separatedRecords = kinesis.deaggregate(aggregatedRecord, false, getRecordJson);
-                separatedRecords = kinesis.filterRecords(query, separatedRecords);
-                deaggregatedRecords = deaggregatedRecords.concat(separatedRecords);
-            });
-
-            debug("records:", deaggregatedRecords.length);
-            Responses.ok(res, deaggregatedRecords);
+    const streamname = req.query.streamname;
+    const timestamp = getEpochTimestamp(req.query.duration);
+    const records = kinesis.getRecords(streamname, timestamp)
+        .then(records => {
+            debug("records:", records.length);
+            Responses.ok(res, records);
         })
         .catch(err => {
             const body = {
@@ -279,15 +198,6 @@ const recordsRoute = function (req, res) {
             debug(body);
             Responses.invalidRequest(res, body);
         });
-};
-
-const getRecordJson = function (data) {
-    const entry = new Buffer(data, 'base64').toString();
-    try {
-        return JSON.parse(entry);
-    } catch (ex) {
-        return { "INVALID JSON": entry };
-    }
 };
 
 kinesisStreamReader();
