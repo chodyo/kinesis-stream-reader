@@ -24,15 +24,15 @@ module.exports = {
  *          response.
  */
 function _base(res, message, headers) {
-    if (message) {
-        // this.setHeader('Content-type', 'text/plain');
-        res.write(JSON.stringify(message));
-    }
+    res.setHeader("Content-Type", "application/json");
     if (Object.keys(headers).length !== 0) {
         Object.keys(headers).forEach(function (key) {
             res.setHeader(key, headers[key]);
         });
     }
+
+    res.write(JSON.stringify(message));
+
     res.end();
 }
 

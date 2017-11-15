@@ -1,6 +1,6 @@
 {
   "name": "kinesis-stream-reader",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "description": "reads records from kinesis stream using api",
   "main": "app.js",
   "dependencies": {
@@ -10,11 +10,21 @@
     "debug": "^2.6.8",
     "express": "^4.15.3",
     "path": "^0.12.7",
-    "serve-favicon": "^2.4.3"
+    "serve-favicon": "^2.4.3",
+    "queryTools": "file:my_modules/queryTools",
+    "responses": "file:my_modules/responses",
+    "kinesisReader": "file:my_modules/kinesisReader",
+    "objectFilter": "file:my_modules/objectFilter"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "chai": "^4.1.2",
+    "chai-http": "^3.0.0",
+    "mocha": "^4.0.1",
+    "proxyquire": "^1.8.0"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "test": "mocha --recursive"
   },
   "repository": {
     "type": "git",

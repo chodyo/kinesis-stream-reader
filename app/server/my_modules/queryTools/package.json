@@ -1,0 +1,7 @@
+{
+    "name": "queryTools",
+    "description": "Validate optional and required query params in a URL.",
+    "private": true,
+    "version": "1.0.0",
+    "main": "index.js"
+  }

@@ -1,0 +1,7 @@
+{
+    "name": "responses",
+    "description": "Framework to customize and send responses.",
+    "private": true,
+    "version": "1.0.0",
+    "main": "index.js"
+  }

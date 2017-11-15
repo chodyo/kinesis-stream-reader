@@ -1,0 +1,7 @@
+{
+    "name": "kinesisReader",
+    "description": "Uses AWS SDK to get Amazon Kinesis data.",
+    "private": true,
+    "version": "1.0.0",
+    "main": "index.js"
+  }
