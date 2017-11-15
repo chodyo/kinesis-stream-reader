@@ -37,7 +37,7 @@ describe('API endpoint /records', function () {
     // GET - some data.
     it('should return OK with data', function () {
         return chai.request(app)
-            .get('/records?streamname=dev-agent-dl-events')
+            .get('/records?streamname=test-stream')
             .then(function (res) {
                 expect(res).to.have.status(200);
                 expect(res).to.be.json;
