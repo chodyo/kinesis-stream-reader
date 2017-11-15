@@ -12,9 +12,10 @@ will return all messages sent in the last 10 minutes from the *example-stream* s
 
 ### Recommended Tools
 - JSON in the browser
+    - Firefox does this by default :o
 	- If you'll be using this service in the browser at all, we recommend you install a browser plugin to format JSON data.
 
-## Installing and Debugging
+## Installing and Debugging the Server
 
 ### 1. Download and install nodejs.
 
@@ -28,10 +29,11 @@ npm install
 
 
 ### 2. Accessing your kinesis stream
-Create a file in the src directory (with src/app.js) named `secrets.js` and fill it with the following, entering in your AWS account information where relevant:
+Create a file in the kinesisReader directory (app/server/my_modules/kinesisReader) named `secrets.js` and fill it with the following, entering in your AWS account information where relevant:
 
-`secrets.js`
-```javascript 
+```javascript
+// app/server/my_modules/kinesisReader/secrets.js
+
 var AWS = require('aws-sdk');
 
 // NEVER EVER EVER EVER UPLOAD THIS TO A REPOSITORY!!!!!!!!!!
@@ -52,11 +54,33 @@ To enable local debugging in VS Code, add the following *configuration* to your 
 
 ```javascript
 {
+    "name": "Launch KSR Service",
     "type": "node",
     "request": "launch",
-    "name": "KSR",
-    "program": "${file}",
-    "env":{ "DEBUG": "*,-not_this" }
+    "program": "${workspaceRoot}/kinesis-stream-reader/app/server/index.js",
+    "env": {"DEBUG": "*,-not_this"},
+    "stopOnEntry": false
 }
 ```
 The "env" attribute is to enable verbose debugging. See the [javascript debug module](https://github.com/visionmedia/debug) for more information.
+
+### 4. Running unit tests locally with VS Code.
+To allow VS code to run the unit tests of this project, add the following *configuration* to your .vscode/launch.json file:
+
+```javascript
+{
+    "name": "Test KSR",
+    "type": "node",
+    "request": "launch",
+    "program": "${workspaceFolder}/kinesis-stream-reader/app/server/node_modules/mocha/bin/_mocha",
+    "args": [
+        "-u",
+        "tdd",
+        "--timeout",
+        "999999",
+        "--colors",
+        "${workspaceRoot}/kinesis-stream-reader/app/server/test"
+    ],
+    "internalConsoleOptions": "openOnSessionStart",
+    "stopOnEntry": false
+}
