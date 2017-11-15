@@ -3,7 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const favicon = require('serve-favicon');
 const path = require('path');
-const kinesis = require('./kinesis-reader');
+
+const KinesisReader = require('./kinesis-reader');
+const Responses = require('./custom_modules/responses');
+const QueryParamValidator = require('./custom_modules/query-param-validator');
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -17,132 +20,6 @@ function kinesisStreamReader(port = 4000) {
     app.get('/records', recordsRoute);
     app.listen(port);
     debug(`Listening on Port ${port}....`);
-}
-
-
-////////////////////////////////////////////////////////////////////////////////
-//----------------------------- responses -------------------------------------
-//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-
-/**
- * Container object for all responses the KSR will return.
- */
-const Responses = {
-    /**
-     * Will set responses as desired AND END!!!!
-     * @param   {Object}                    res
-     *          The same response object created in the NodeJS route handler.
-     * @param   {*}                         message
-     *          Whatever description you want to send to the user in the body of
-     *          the response. No body will be sent if no message is defined.
-     * @param   {Object.<string, string>}   headers
-     *          Key-Value pairs of HTTP headers that will be sent with the
-     *          response.
-     */
-    _base: function (res, message, headers) {
-        if (message) {
-            // this.setHeader('Content-type', 'text/plain');
-            res.write(JSON.stringify(message));
-        }
-        if (Object.keys(headers).length !== 0) {
-            Object.keys(headers).forEach(function (key) {
-                res.setHeader(key, headers[key]);
-            });
-        }
-        res.end();
-    },
-    /**
-     * @augments Responses.base
-     */
-    invalidRequest: function (res, message = null, headers = {}) {
-        res.statusCode = 400;
-        this._base(res, message, headers);
-    },
-    /**
-     * @augments Responses.base
-     */
-    ok: function (res, message = null, headers = {}) {
-        res.statusCode = 200;
-        this._base(res, message, headers);
-    }
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-//-------------------------- query parameters ---------------------------------
-//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-
-/**
- * @typedef     {Object}        QueryParamSchema
- * @property    {Set<string>}   schema.allowed
- *              A set of all valid query parameters.
- * @property    {string[]}      schema.required
- *              A list of all required query parameters. Should overlap allowed.
- */
-const schema = {
-    allowed: new Set([
-        'duration',
-        'streamname',
-        'contactId',
-        'agentId',
-        'serverName',
-        'tenantId',
-        'agentShiftId'
-    ]),
-    required: [
-        'streamname'
-    ]
-};
-
-/**
- * @typedef     {Object}    QueryParamValidator
- * @property    {boolean}   badRequest
- *              Indicates if the parameters given are invalid or in the
- *              incorrect form.
- * @property    {string[]}  [missingRequiredParams]
- *              All parameters that should have been in the request but weren't.
- * @property    {string[]}  [invalidParams]
- *              All parameters that were given and not recognized.
- */
-/**
- * Ensures all required query params exist, and all existing params are valid.
- * @param   {QueryParamSchema}  schema
- *          The query parameter schema.
- * @param   {Object}            requestParams
- *          An object containing a property for each query string parameter in
- *          the route. If there is no query string, it is the empty object, {}.
- * @return  {QueryParamValidator}
- *          Whether or not query params were valid and reasons why the query
- *          params were invalid, if applicable.
- */
-function validateQueryParams(schema, request) {
-    // initialize return value
-    const ret = {};
-    ret.badRequest = false;
-
-    // find all required params that are not in the request
-    const required = schema.required.filter(required => {
-        return request[required] === undefined;
-    });
-    // if any required attributes were not listed as parameters, that's an error
-    if (required.length > 0) {
-        ret.badRequest = true;
-        ret.missingRequiredParams = required;
-    }
-
-    // iterate over the requestParams object, getting every attribute contained
-    // therein. this is probably optional, but will help fix typos.
-    var invalidQueryParams = Object.keys(request).filter(param => {
-        return !schema.allowed.has(param);
-    });
-
-    // if any attributes were not specified as allowed params, that's an error
-    if (invalidQueryParams.length > 0) {
-        ret.badRequest = true;
-        ret.invalidParams = invalidQueryParams;
-    }
-
-    return ret;
 }
 
 
@@ -244,7 +121,11 @@ function filterRecords(query, separatedRecords) {
 function recordsRoute(req, res) {
     // quick sanity check for the user on query params
     // make sure required query params are in query
-    const paramStatus = validateQueryParams(schema, req.query);
+    const allowedParams = ['duration','streamname','contactId','agentId',
+        'serverName','tenantId','agentShiftId'];
+    const requiredParams = ['streamname'];
+    const validator = new QueryParamValidator(allowedParams, requiredParams);
+    const paramStatus = validator.validateParams(req.query);
     debug('param status =', JSON.stringify(paramStatus));
     if (paramStatus.badRequest) {
         Responses.invalidRequest(res, paramStatus);
@@ -253,7 +134,7 @@ function recordsRoute(req, res) {
 
     const streamname = req.query.streamname;
     const timestamp = getEpochTimestamp(req.query.duration);
-    kinesis.getRecords(streamname, timestamp)
+    KinesisReader.getRecords(streamname, timestamp)
         .then(records => {
             const filteredRecords = filterRecords(req.query, records);
             debug("records:", filteredRecords.length);
