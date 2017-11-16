@@ -5,17 +5,15 @@
 version: 2
 jobs:
 
-  checkout:
-    docker:
-      - image: circleci/node:8.9.1
-    steps:
-      - checkout
-
   build:
-    working_directory: ~/kinesis-stream-reader/app/server
     docker:
       - image: circleci/node:8.9.1
     steps:
+      ### CHECKOUT
+      - checkout
+      
+      ### BUILD
+      - run: cd kinesis-stream-reader/app/server
       # - restore_cache:
       #     keys:
       #       - v1-dependencies-{{ checksum "package.json" }}
@@ -28,12 +26,8 @@ jobs:
       #     paths:
       #       - node_modules
       #     key: v1-dependencies-{{ checksum "package.json" }}
-
-  test:
-    docker:
-      - image: circleci/node:8.9.1
-    steps:
-      # working_directory: ~/kinesis-stream-reader/app/server
+      
+      ### TEST
       - run: mkdir ~/junit
       - run:
           command: mocha test --reporter mocha-junit-reporter
@@ -44,7 +38,23 @@ jobs:
           path: ~/junit
       - store_artifacts:
           path: ~/junit
-      # steps:
-      #   - run:
-      #       name: test
-      #       command: npm test
+
+  # test:
+  #   docker:
+  #     - image: circleci/node:8.9.1
+  #   steps:
+  #     # working_directory: ~/kinesis-stream-reader/app/server
+  #     - run: mkdir ~/junit
+  #     - run:
+  #         command: mocha test --reporter mocha-junit-reporter
+  #         environment:
+  #           MOCHA_FILE: ~/junit/test-results.xml
+  #         when: always
+  #     - store_test_results:
+  #         path: ~/junit
+  #     - store_artifacts:
+  #         path: ~/junit
+  #     # steps:
+  #     #   - run:
+  #     #       name: test
+  #     #       command: npm test
