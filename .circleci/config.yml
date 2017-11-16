@@ -14,7 +14,6 @@ jobs:
       - checkout
       
       ### BUILD
-      - run: cd ~/project/app/server
       - restore_cache:
           keys:
             - v1-dependencies-{{ checksum "~/project/app/server/package.json" }}
@@ -31,7 +30,7 @@ jobs:
       ### TEST
       - run: mkdir ~/junit
       - run:
-          command: ~/project/app/server/node_modules/mocha/bin/_mocha test --reporter mocha-junit-reporter
+          command: cd ~/project/app/server && mocha/bin/_mocha test --reporter mocha-junit-reporter
           environment:
             MOCHA_FILE: ~/junit/test-results.xml
           when: always
