@@ -4,6 +4,9 @@
 #
 version: 2
 jobs:
+  checkout:
+    steps:
+      - checkout
   build:
     working_directory: ~/kinesis-stream-reader/app/server
     docker:
@@ -22,6 +25,11 @@ jobs:
           paths:
             - node_modules
           key: v1-dependencies-{{ checksum "package.json" }}
+  test:
+    docker:
+      - image: circleci/node:8.9.1
+    steps:
+      - checkout
       - run:
-          name: tests
+          name: test
           command: npm test
