@@ -1,6 +1,6 @@
 const chai = require('chai');
 const expect = require('chai').expect;
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 chai.use(require('chai-http'));
 
@@ -9,7 +9,7 @@ chai.use(require('chai-http'));
 //--------------------------------- mocks -------------------------------------
 //\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
-const testData = [{ "record": 1 }, { "record": 2 }, { "record": 3 }];
+const testData = [{ 'record': 1 }, { 'record': 2 }, { 'record': 3 }];
 const kinesisStub = {
     getRecords: function (streamname, timestamp) {
         return Promise.resolve(testData);
