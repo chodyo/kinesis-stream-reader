@@ -16,7 +16,6 @@ jobs:
     docker:
       - image: circleci/node:8.9.1
     steps:
-      - checkout
       - restore_cache:
           keys:
             - v1-dependencies-{{ checksum "package.json" }}
@@ -29,12 +28,11 @@ jobs:
           paths:
             - node_modules
           key: v1-dependencies-{{ checksum "package.json" }}
-          
+
   test:
     docker:
       - image: circleci/node:8.9.1
     steps:
-      - checkout
       - run:
           name: test
           command: npm test
