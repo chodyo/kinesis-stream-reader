@@ -30,11 +30,17 @@ jobs:
       #     key: v1-dependencies-{{ checksum "package.json" }}
 
   test:
-    override:
-      - mocha test --reporter mocha-junit-reporter:
-          environment:
-            MOCHA_FILE: $CIRCLE_TEST_RESULTS/junit/test-results
     # working_directory: ~/kinesis-stream-reader/app/server
+    - run: mkdir ~/junit
+    - run:
+        command: mocha test --reporter mocha-junit-reporter
+        environment:
+          MOCHA_FILE: ~/junit/test-results.xml
+        when: always
+    - store_test_results:
+        path: ~/junit
+    - store_artifacts:
+        path: ~/junit
     # docker:
     #   - image: circleci/node:8.9.1
     # steps:
