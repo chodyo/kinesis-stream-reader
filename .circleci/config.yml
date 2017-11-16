@@ -30,6 +30,8 @@ jobs:
       #     key: v1-dependencies-{{ checksum "package.json" }}
 
   test:
+    docker:
+      - image: circleci/node:8.9.1
     steps:
       # working_directory: ~/kinesis-stream-reader/app/server
       - run: mkdir ~/junit
@@ -42,8 +44,6 @@ jobs:
           path: ~/junit
       - store_artifacts:
           path: ~/junit
-      # docker:
-      #   - image: circleci/node:8.9.1
       # steps:
       #   - run:
       #       name: test
