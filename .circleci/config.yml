@@ -22,7 +22,7 @@ jobs:
             - v1-dependencies-
       - run:
           name: install-dependencies
-          command: npm install
+          command: cd ~/project/app/server && npm install
       - save_cache:
           paths:
             - node_modules
