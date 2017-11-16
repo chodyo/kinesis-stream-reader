@@ -30,7 +30,7 @@ jobs:
       ### TEST
       - run: mkdir ~/junit
       - run:
-          command: cd ~/project/app/server && mocha/bin/_mocha test --reporter mocha-junit-reporter
+          command: cd ~/project/app/server && node_modules/mocha/bin/_mocha test --reporter mocha-junit-reporter
           environment:
             MOCHA_FILE: ~/junit/test-results.xml
           when: always
