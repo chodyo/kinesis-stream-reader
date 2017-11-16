@@ -16,23 +16,28 @@ jobs:
     docker:
       - image: circleci/node:8.9.1
     steps:
-      - restore_cache:
-          keys:
-            - v1-dependencies-{{ checksum "package.json" }}
-            # fallback to using the latest cache if no exact match is found
-            - v1-dependencies-
+      # - restore_cache:
+      #     keys:
+      #       - v1-dependencies-{{ checksum "package.json" }}
+      #       # fallback to using the latest cache if no exact match is found
+      #       - v1-dependencies-
       - run:
           name: install-dependencies
           command: npm install
-      - save_cache:
-          paths:
-            - node_modules
-          key: v1-dependencies-{{ checksum "package.json" }}
+      # - save_cache:
+      #     paths:
+      #       - node_modules
+      #     key: v1-dependencies-{{ checksum "package.json" }}
 
   test:
-    docker:
-      - image: circleci/node:8.9.1
-    steps:
-      - run:
-          name: test
-          command: npm test
+    override:
+      - mocha test --reporter mocha-junit-reporter:
+          environment:
+            MOCHA_FILE: $CIRCLE_TEST_RESULTS/junit/test-results
+    # working_directory: ~/kinesis-stream-reader/app/server
+    # docker:
+    #   - image: circleci/node:8.9.1
+    # steps:
+    #   - run:
+    #       name: test
+    #       command: npm test
