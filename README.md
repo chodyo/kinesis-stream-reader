@@ -79,7 +79,8 @@ To allow VS code to run the unit tests of this project, add the following *confi
         "--timeout",
         "999999",
         "--colors",
-        "${workspaceRoot}/kinesis-stream-reader/app/server/test"
+        "${workspaceRoot}/kinesis-stream-reader/app/server/test",
+    	"--exit"
     ],
     "internalConsoleOptions": "openOnSessionStart",
     "stopOnEntry": false
