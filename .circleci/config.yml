@@ -35,6 +35,6 @@ jobs:
           #   MOCHA_FILE: ~/junit/test-results.xml
           when: always
       - store_test_results:
-          path: ~/project/app/server
+          path: ~/project/app/server/test-results.xml
       - store_artifacts:
-          path: ~/project/app/server
+          path: ~/project/app/server/test-results.xml
