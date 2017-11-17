@@ -31,7 +31,7 @@ jobs:
       - run: mkdir ~/junit
       - run:
           command: cd ~/project/app/server 
-            && node_modules/mocha/bin/_mocha test --reporter mocha-junit-reporter --exit
+            && ./node_modules/.bin/mocha --reporter mocha-circleci-reporter test/*.js --exit
             && if [[ -e test-results.xml ]]; then cp test-results.xml $CIRCLE_TEST_REPORTS/test-results.xml; fi
           # environment:
           #   MOCHA_FILE: ~/junit/test-results.xml
