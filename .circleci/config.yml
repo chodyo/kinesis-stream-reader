@@ -38,4 +38,4 @@ jobs:
           path: ~/project/app/server/test-results.xml
       - store_artifacts:
           path: ~/project/app/server/test-results.xml
-          destination: tests-results.xml
+          destination: test-results.xml
