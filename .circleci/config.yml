@@ -32,7 +32,8 @@ jobs:
       - run:
           command: cd ~/project/app/server 
             && ./node_modules/.bin/mocha --reporter mocha-circleci-reporter test/*.js --exit
-            && if [[ -e test-results.xml ]]; then cp test-results.xml $CIRCLE_TEST_REPORTS/test-results.xml; fi
+            && echo $CIRCLE_TEST_REPORTS
+            && if [[ -e test-results.xml ]]; then sudo cp test-results.xml $CIRCLE_TEST_REPORTS/test-results.xml; fi
           # environment:
           #   MOCHA_FILE: ~/junit/test-results.xml
           when: always
