@@ -48,3 +48,4 @@ jspm_packages
 
 secrets.js
 .jshintrc
+*test-results.xml

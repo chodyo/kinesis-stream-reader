@@ -30,7 +30,7 @@ jobs:
       ### TEST
       - run: mkdir ~/junit
       - run:
-          command: cd ~/project/app/server && node_modules/mocha/bin/_mocha test --reporter mocha-junit-reporter
+          command: cd ~/project/app/server && node_modules/mocha/bin/_mocha test --reporter mocha-junit-reporter --exit
           environment:
             MOCHA_FILE: ~/junit/test-results.xml
           when: always
@@ -38,23 +38,3 @@ jobs:
           path: ~/junit
       - store_artifacts:
           path: ~/junit
-
-  # test:
-  #   docker:
-  #     - image: circleci/node:8.9.1
-  #   steps:
-  #     # working_directory: ~/kinesis-stream-reader/app/server
-  #     - run: mkdir ~/junit
-  #     - run:
-  #         command: mocha test --reporter mocha-junit-reporter
-  #         environment:
-  #           MOCHA_FILE: ~/junit/test-results.xml
-  #         when: always
-  #     - store_test_results:
-  #         path: ~/junit
-  #     - store_artifacts:
-  #         path: ~/junit
-  #     # steps:
-  #     #   - run:
-  #     #       name: test
-  #     #       command: npm test
