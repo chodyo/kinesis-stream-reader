@@ -30,11 +30,11 @@ jobs:
       ### TEST
       - run: mkdir ~/junit
       - run:
-          command: cd ~/project/app/server && node_modules/mocha/bin/_mocha test --reporter mocha-junit-reporter --exit mochaFile='~/junit/test-results.xml'
-          environment:
-            MOCHA_FILE: ~/junit/test-results.xml
+          command: cd ~/project/app/server && node_modules/mocha/bin/_mocha test --reporter mocha-junit-reporter --exit
+          # environment:
+          #   MOCHA_FILE: ~/junit/test-results.xml
           when: always
       - store_test_results:
-          path: ~/junit
+          path: ~/project/app/server
       - store_artifacts:
-          path: ~/junit
+          path: ~/project/app/server
