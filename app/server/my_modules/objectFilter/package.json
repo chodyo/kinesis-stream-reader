@@ -1,7 +1,0 @@
-{
-    "name": "objectFilter",
-    "description": "Currently filters a list of objects based on a preset schema. Will it to be more general in the future.",
-    "private": true,
-    "version": "0.1.0",
-    "main": "index.js"
-  }
