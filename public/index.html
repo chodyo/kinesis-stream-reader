@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang='en'>
+
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <meta http-equiv='X-UA-Compatible' content='ie=edge'>
+    <title>KSR</title>
+</head>
+
+<body>
+
+    <div id='form'>
+        <div class='row'>
+            <div class='col-sm no-float'>
+                <div id='inputs'>
+
+
+                    <div class='row'>url of server:
+                        <input id='url' type='url' value='default'>
+                        <!-- <input id='url' type='url' value='http://localhost:4000/'> -->
+                    </div>
+
+
+                    <div class='row'>kinesis stream name:
+                        <input id='streamname' type='text' value='example-stream'>
+                    </div>
+
+
+                    <div class='row'>minutes ago:
+                        <input id='minutes' type='number' value=10 min=1 max=300>
+                    </div>
+
+
+                    <div class='row'>
+                        <button id='getJson' type='submit' onclick='getJson()'>Get JSON</button>
+                    </div>
+
+
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id='container'>
+        <div class='row'>
+            <div class='col-sm no-float'>
+                <pre id='data' class='prettyprint'>{
+    "status": "fill out the form and click [Get JSON]"
+}</pre>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- STYLES -->
+    <link rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css' integrity='sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u' crossorigin='anonymous'>
+    <link rel='stylesheet' href='assets/css/desert.css'>
+    <link rel='stylesheet' href='assets/css/style.css'>
+
+    <!-- SCRIPTS -->
+    <script src='http://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js'></script>
+    <script src='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.19.1/moment.js'></script>
+    <script src='https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js' integrity='sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa' crossorigin='anonymous'></script>
+    <script src='http://cdn.rawgit.com/google/code-prettify/master/loader/run_prettify.js'></script>
+    <script src='assets/javascript/app.js'></script>
+</body>
+
+</html>
