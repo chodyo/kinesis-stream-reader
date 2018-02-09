@@ -2,19 +2,20 @@
 // -/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/-/
 
 // Require our dependencies
-var express = require("express");
+const express = require("express");
+const debug = require('debug')('KSR:app');
 
 // Set up our port to be either the host's designated port, or 3000
-var PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 // Instantiate our Express App
-var app = express();
+const app = express();
 
 // Designate our public folder as a static directory
 app.use(express.static("public"));
 
 // Require our routes
-var routes = require("./routes");
+const routes = require("./routes");
 
 // Have every request go through our route middleware
 app.use(routes);

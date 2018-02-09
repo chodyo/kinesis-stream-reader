@@ -5,14 +5,14 @@
 version: 2
 jobs:
 
-  build:
+  test:
     docker:
       - image: circleci/node:8.9.1
     steps:
       ### CHECKOUT
       # circleCI clones the code into ~/project
       - checkout
-      
+
       ### BUILD
       - restore_cache:
           keys:
@@ -26,11 +26,11 @@ jobs:
           paths:
             - node_modules
           key: v1-dependencies-{{ checksum "~/project/app/server/package.json" }}
-      
+
       ### TEST
       - run: mkdir ~/junit
       - run:
-          command: cd ~/project/app/server 
+          command: cd ~/project/app/server
             && ./node_modules/.bin/mocha --reporter mocha-circleci-reporter test/*.js --exit
             && if [[ -e test-results.xml ]]; then sudo cp test-results.xml ~/junit/test-results.xml; fi
           # environment:
@@ -41,3 +41,24 @@ jobs:
       - store_artifacts:
           path: ~/junit/test-results.xml
           destination: test-results.xml
+
+  deploy-master:
+    docker:
+      - image: circleci/node:8.9.1
+    steps:
+      - run:
+          name: Deploy to EC2 if tests pass and branch is master.
+          command: aws CLI command here
+
+workflows:
+  version: 2
+
+  build-deploy-master:
+    jobs:
+      - test
+      - deploy-master:
+          requires:
+            - test
+          filters:
+            branches:
+              only: master
