@@ -1,6 +1,6 @@
 var router = require("express").Router();
-var recordsRoutes = require("./records");
+var streamnameRoutes = require("./streamname");
 
-router.use("/records", recordsRoutes);
+router.use("/:streamname", streamnameRoutes);
 
 module.exports = router;

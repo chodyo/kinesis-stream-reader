@@ -1,12 +1,19 @@
-const kinesis = require('./secrets').getKinesis();
-const deagg = require('aws-kinesis-agg/kpl-deagg');
-const common = require('./resources/common');
+const AWS = require("aws-sdk");
+const deagg = require("aws-kinesis-agg/kpl-deagg");
+const common = require("./common");
 let AggregatedRecord = common.loadBuilder();
-const debug = require('debug')('KSR:kr');
+const debug = require("debug")("reader-scripts-kinesis");
 
 module.exports = {
     getRecords: getRecords
 };
+
+const kinesis = new AWS.Kinesis({
+    apiVersion: process.env.API_VERSION,
+    accessKeyId: process.env.ACCESS_KEY_ID,
+    secretAccessKey: process.env.SECRET_ACCESS_KEY,
+    region: process.env.REGION
+});
 
 async function getRecords(streamname, timestamp) {
     // 1. get the first shard iterator (kinesis.getShardIterator)
@@ -28,7 +35,11 @@ async function getRecords(streamname, timestamp) {
 
         results.Records.forEach(aggregateRecord => {
             // manually deaggregate records
-            let separatedRecords = deaggregate(aggregateRecord, false, getRecordAsJson);
+            let separatedRecords = deaggregate(
+                aggregateRecord,
+                false,
+                getRecordAsJson
+            );
             // combine lists
             parsedRecords = parsedRecords.concat(separatedRecords);
             // Array.prototype.push.apply(deaggregatedList, separatedRecords);
@@ -38,8 +49,7 @@ async function getRecords(streamname, timestamp) {
         // TODO: why do we need the length check??
         if (results.MillisBehindLatest !== 0 || results.Records.length !== 0) {
             getRecordsInput.ShardIterator = results.NextShardIterator;
-        }
-        else {
+        } else {
             getRecordsInput = null;
         }
     }
@@ -74,8 +84,8 @@ async function getRecords(streamname, timestamp) {
  */
 function getAwsData(stream, oldestRecord) {
     return {
-        ShardId: '0',
-        ShardIteratorType: 'AT_TIMESTAMP',
+        ShardId: "0",
+        ShardIteratorType: "AT_TIMESTAMP",
         StreamName: stream,
         Timestamp: oldestRecord
     };
@@ -86,21 +96,21 @@ function getShardIterator(getShardIteratorInput) {
         kinesis.getShardIterator(getShardIteratorInput, (err, data) => {
             if (err) {
                 reject(new InvalidStreamNameException());
-            }
-            else {
+            } else {
                 resolve(data.ShardIterator);
             }
         });
     });
 }
 
-
 function getKinesisRecords(getRecordsInput) {
     return new Promise((resolve, reject) => {
-        kinesis.getRecords(getRecordsInput, function (err, data) {
+        kinesis.getRecords(getRecordsInput, function(err, data) {
             if (err) {
                 promise = null;
-                reject(CannotGetRecordsException("Try again?\n" + err.toString()));
+                reject(
+                    CannotGetRecordsException("Try again?\n" + err.toString())
+                );
             }
             resolve(data);
         });
@@ -108,7 +118,7 @@ function getKinesisRecords(getRecordsInput) {
 }
 
 function getRecordAsJson(data) {
-    const entry = new Buffer(data, 'base64').toString();
+    const entry = new Buffer(data, "base64").toString();
     try {
         return JSON.parse(entry);
     } catch (ex) {
@@ -122,25 +132,32 @@ function deaggregate(kinesisRecord, computeChecksums, perRecordParse) {
     // underscores in protobuf model)
     //
     // we receive the record data as a base64 encoded string
-    const recordBuffer = new Buffer(kinesisRecord.Data, 'base64');
+    const recordBuffer = new Buffer(kinesisRecord.Data, "base64");
     let records = [];
 
     // first 4 bytes are the kpl assigned magic number
     // https://github.com/awslabs/amazon-kinesis-producer/blob/master/aggregation-format.md
-    if (recordBuffer.slice(0, 4).toString('hex') === kplConfig[useKplVersion].magicNumber) {
+    if (
+        recordBuffer.slice(0, 4).toString("hex") ===
+        kplConfig[useKplVersion].magicNumber
+    ) {
         try {
             // decode the protobuf binary from byte offset 4 to length-16 (last
             // 16 are checksum)
-            const protobufMessage = AggregatedRecord.decode(recordBuffer.slice(4, recordBuffer.length - 16));
+            const protobufMessage = AggregatedRecord.decode(
+                recordBuffer.slice(4, recordBuffer.length - 16)
+            );
 
             // extract the kinesis record checksum
-            const recordChecksum = recordBuffer.slice(recordBuffer.length - 16, recordBuffer.length).toString('base64');
+            const recordChecksum = recordBuffer
+                .slice(recordBuffer.length - 16, recordBuffer.length)
+                .toString("base64");
 
             if (computeChecksums === true) {
                 // compute a checksum from the serialised protobuf message
-                const md5 = crypto.createHash('md5');
+                const md5 = crypto.createHash("md5");
                 md5.update(recordBuffer.slice(4, recordBuffer.length - 16));
-                const calculatedChecksum = md5.digest('base64');
+                const calculatedChecksum = md5.digest("base64");
 
                 // validate that the checksum is correct for the transmitted
                 // data
@@ -157,13 +174,11 @@ function deaggregate(kinesisRecord, computeChecksums, perRecordParse) {
 
                 // emit the per-record callback with the extracted partition
                 // keys and sequence information
-                const record = perRecordParse(item.data.toString('base64'));
+                const record = perRecordParse(item.data.toString("base64"));
                 records.push(record);
             }
-        } catch (e) {
-        }
-    }
-    else {
+        } catch (e) {}
+    } else {
         // not a KPL encoded message - no biggie - emit the record with
         // the same interface as if it was. Customers can differentiate KPL
         // user records vs plain Kinesis Records on the basis of the
@@ -174,7 +189,6 @@ function deaggregate(kinesisRecord, computeChecksums, perRecordParse) {
     }
     return records;
 }
-
 
 // exceptions
 // https://stackoverflow.com/questions/464359/custom-exceptions-in-javascript
@@ -199,4 +213,3 @@ function NoShardIteratorException(message) {
 NoShardIteratorException.prototype = Object.create(Error.prototype);
 NoShardIteratorException.prototype.name = "NoShardIteratorException";
 NoShardIteratorException.prototype.constructor = NoShardIteratorException;
-
