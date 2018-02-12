@@ -46,6 +46,7 @@ jspm_packages
 # Yarn Integrity file
 .yarn-integrity
 
-secrets.js
+# Project Specific Stuff
+mydb
 .jshintrc
 *test-results.xml

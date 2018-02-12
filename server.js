@@ -25,7 +25,19 @@ const routes = require("./routes");
 // Have every request go through our route middleware
 app.use(routes);
 
+// Kinesalite server
+const kinesalite = require("kinesalite");
+const kinesialiteServer = kinesalite({
+    path: "./mydb",
+    createStreamMs: 50,
+    ssl: true
+});
+kinesialiteServer.listen(4567, function(err) {
+    if (err) throw err;
+    debug("Kinesalite started on port 4567");
+});
+
 // Listen on the port
 app.listen(PORT, function() {
-    debug("Listening on port: " + PORT);
+    debug("Listening on port: " + PORT, process.env.NODE_ENV);
 });

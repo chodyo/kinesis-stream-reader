@@ -8,6 +8,7 @@
         "aws-sdk": "^2.59.0",
         "debug": "^2.6.8",
         "express": "^4.15.3",
+        "kinesis": "^1.2.2",
         "moment": "^2.20.1"
     },
     "devDependencies": {
