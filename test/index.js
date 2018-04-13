@@ -1,79 +1,109 @@
-const chai = require("chai");
-const expect = require("chai").expect;
-const proxyquire = require("proxyquire").noCallThru();
+const expect = require("chai").expect,
+    debug = require("debug")("reader-tests");
 
-chai.use(require("chai-http"));
+describe("My kinesis module", function() {
+    let myKinesis, myOptions;
 
-////////////////////////////////////////////////////////////////////////////////
-//--------------------------------- mocks -------------------------------------
-//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+    before(function() {
+        const kinesisMock = require("kinesalite")({
+            path: "./mydb",
+            createStreamMs: 50,
+            ssl: true
+        });
+        kinesisMock.listen(4567, function(err) {
+            if (err) throw err;
+            debug("Kinesalite server started on port 4567");
+        });
 
-const testData = [{ record: 1 }, { record: 2 }, { record: 3 }];
-const kinesisStub = {
-    getRecords: function(streamname, timestamp) {
-        return Promise.resolve(testData);
-    }
-};
-const app = proxyquire("../index.js", { kinesisReader: kinesisStub });
+        myKinesis = require("../scripts/kinesis");
 
-////////////////////////////////////////////////////////////////////////////////
-//--------------------------------- tests -------------------------------------
-//\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
-
-describe("API endpoint /records", function() {
-    this.timeout(5000); // How long to wait for a response (ms)
-
-    before(function() {});
-
-    after(function() {});
-
-    // GET - some data.
-    it("should return OK with data", function() {
-        return chai
-            .request(app)
-            .get("/records?streamname=test-stream")
-            .then(function(res) {
-                expect(res).to.have.status(200);
-                expect(res).to.be.json;
-                expect(res.body).to.be.an("array");
-                expect(res.body.length).to.equal(3);
-                const body = JSON.stringify(res.body);
-                const expected = JSON.stringify(testData);
-                expect(body).to.equal(expected);
-            });
+        myOptions = { host: "localhost", port: 4567 };
     });
 
-    // GET - invalid path
-    it("should return Not Found", function() {
-        return chai
-            .request(app)
-            .get("/INVALID_PATH")
-            .then(function(res) {
-                throw new Error("Path exists!");
-            })
-            .catch(function(err) {
-                expect(err).to.have.status(404);
-            });
+    describe("with no existing streams", function() {
+        it("can ask for stream names", done => {
+            myKinesis
+                .listStreams(myOptions)
+                .then(streams => {
+                    debug("streams:", streams);
+                    expect(streams).to.have.length(0);
+                    done();
+                })
+                .catch(err => {
+                    debug("err:", err);
+                    done(err);
+                });
+        });
     });
 
-    // GET - no streamname
-    it("should return Bad Request with explanation", function() {
-        return chai
-            .request(app)
-            .get("/records")
-            .then(function(res) {
-                throw new Error("Path not checking for required query params!");
-            })
-            .catch(function(err) {
-                expect(err).to.have.status(400);
-                expect(err.response).to.be.json;
-                expect(err.response.body).to.be.an("object");
-                expect(err.response.body.badRequest).to.be.a("boolean");
-                expect(err.response.body.badRequest).to.equal(true);
-                expect(err.response.body.missingRequiredParams).to.be.an(
-                    "array"
+    describe("with existing streams", function() {
+        const newStreamNames = ["one", "two", "three"];
+
+        before(() => {
+            var Writable = require("stream").Writable,
+                kinesis = require("kinesis");
+
+            require("https").globalAgent.maxSockets = Infinity;
+
+            var consoleOut = new Writable({ objectMode: true });
+            consoleOut._write = function(chunk, encoding, cb) {
+                chunk.Data = chunk.Data.slice(0, 10);
+                console.dir(chunk);
+                cb();
+            };
+
+            debug("creating streams");
+            // const kinesis = myKinesis.expose();
+            newStreamNames.forEach(newStreamName => {
+                const newStreamOptions = Object.assign(
+                    {},
+                    { name: newStreamName },
+                    myOptions
                 );
-                expect(err.response.body.invalidParams).to.be.an("array");
+                var kinesisStream = kinesis.stream(newStreamOptions);
+                kinesisStream.pipe(consoleOut);
             });
+
+            var now = new Date().getTime();
+            while (new Date().getTime() < now + 1000) {
+                /* do nothing */
+            }
+
+            var Readable = require("stream").Readable;
+
+            var readable = new Readable({ objectMode: true });
+            readable._read = function() {
+                for (var i = 0; i < 100; i++)
+                    this.push({
+                        PartitionKey: i.toString(),
+                        Data: new Buffer("a")
+                    });
+                this.push(null);
+            };
+
+            var kinesisStream = kinesis.stream({
+                name: "one",
+                writeConcurrency: 5
+            });
+
+            readable.pipe(kinesisStream).on("end", function() {
+                console.log("done");
+            });
+        });
+
+        it("can ask for stream names", done => {
+            myKinesis
+                .listStreams(myOptions)
+                .then(streams => {
+                    debug("streams:", streams);
+                    expect(streams).to.have.length(newStreamNames.length);
+                    expect(streams).to.have.same.members(newStreamNames);
+                    done();
+                })
+                .catch(err => {
+                    debug("err:", err);
+                    done(err);
+                });
+        });
     });
 });

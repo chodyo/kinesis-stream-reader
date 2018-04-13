@@ -14,18 +14,16 @@
     },
     "devDependencies": {
         "chai": "^4.1.2",
-        "chai-http": "^3.0.0",
         "eslint": "^4.17.0",
-        "eslint-plugin-react": "^7.6.1",
         "kinesalite": "^1.11.6",
-        "mocha": "^4.0.1",
-        "mocha-circleci-reporter": "0.0.2",
-        "mocha-junit-reporter": "^1.15.0",
-        "proxyquire": "^1.8.0"
+        "mocha": "^4.0.1"
     },
     "scripts": {
         "start": "node server.js",
-        "test": "./node_modules/.bin/mocha --reporter mocha-circleci-reporter test/*.js --exit"
+        "start-debug": "env DEBUG=reader-* node server.js",
+        "test": "./node_modules/.bin/mocha test/*.js --exit",
+        "test-debug":
+            "env DEBUG=reader-* ./node_modules/.bin/mocha test/*.js --exit"
     },
     "repository": {
         "type": "git",

@@ -2,35 +2,17 @@
     "env": {
         "browser": true,
         "es6": true,
-        "node": true
+        "node": true,
+        "mocha": true
     },
     "extends": "eslint:recommended",
     "parserOptions": {
-        "ecmaFeatures": {
-            "experimentalObjectRestSpread": true,
-            "jsx": true
-        },
+        "ecmaFeatures": {},
         "sourceType": "module"
     },
-    "plugins": [
-        "react"
-    ],
     "rules": {
-        "indent": [
-            "error",
-            4
-        ],
-        "linebreak-style": [
-            "error",
-            "windows"
-        ],
-        "quotes": [
-            "error",
-            "double"
-        ],
-        "semi": [
-            "error",
-            "always"
-        ]
+        "indent": ["error", 4],
+        "quotes": ["error", "double"],
+        "semi": ["error", "always"]
     }
 }
