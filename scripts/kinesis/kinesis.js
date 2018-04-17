@@ -41,6 +41,7 @@ module.exports = {
 
             const data = { StreamName: name };
             kinesis.request("DeleteStream", data, options, (err, out) => {
+                debug(`deleteStream callback ${err}, ${out}`);
                 if (err) reject(`Stream ${name} could not be deleted: ${err}`);
                 resolve(out);
             });

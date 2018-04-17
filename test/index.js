@@ -5,10 +5,14 @@ const expect = require("chai").expect,
 
 const kinesaliteServer = kinesalite({
         path: "./mydb",
-        createStreamMs: 50,
         ssl: true
     }),
-    myKinesisOptions = { host: "localhost", port: 4567 };
+    myKinesisOptions = {
+        host: "localhost",
+        port: 4567,
+        region: "us-east-1",
+        credentials: { accessKeyId: "dummy", secretAccessKey: "dummy" }
+    };
 
 describe("My kinesis module", function() {
     before(function() {
@@ -47,7 +51,7 @@ describe("My kinesis module", function() {
                             resolve();
                         })
                         .catch(err => {
-                            debug(`could not delete stream ${newStreamName}: ${err}`);
+                            debug(`could not create stream ${newStreamName}: ${err}`);
                             reject(err);
                         });
                 });
