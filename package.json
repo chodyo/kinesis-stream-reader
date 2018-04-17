@@ -21,9 +21,8 @@
     "scripts": {
         "start": "node server.js",
         "start-debug": "env DEBUG=reader-* node server.js",
-        "test": "./node_modules/.bin/mocha test/*.js --exit",
-        "test-debug":
-            "env DEBUG=reader-* ./node_modules/.bin/mocha test/*.js --exit"
+        "test": "rm -rf mydb && ./node_modules/.bin/mocha test/*.js --exit",
+        "test-debug": "rm -rf mydb && env DEBUG=reader-* ./node_modules/.bin/mocha test/*.js --exit"
     },
     "repository": {
         "type": "git",

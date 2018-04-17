@@ -1,29 +1,27 @@
 const expect = require("chai").expect,
-    debug = require("debug")("reader-tests");
+    debug = require("debug")("reader-tests"),
+    kinesalite = require("kinesalite"),
+    myKinesis = require("../scripts/kinesis");
+
+const kinesaliteServer = kinesalite({
+        path: "./mydb",
+        createStreamMs: 50,
+        ssl: true
+    }),
+    myKinesisOptions = { host: "localhost", port: 4567 };
 
 describe("My kinesis module", function() {
-    let myKinesis, myOptions;
-
     before(function() {
-        const kinesisMock = require("kinesalite")({
-            path: "./mydb",
-            createStreamMs: 50,
-            ssl: true
-        });
-        kinesisMock.listen(4567, function(err) {
+        kinesaliteServer.listen(4567, function(err) {
             if (err) throw err;
             debug("Kinesalite server started on port 4567");
         });
-
-        myKinesis = require("../scripts/kinesis");
-
-        myOptions = { host: "localhost", port: 4567 };
     });
 
     describe("with no existing streams", function() {
         it("can ask for stream names", done => {
             myKinesis
-                .listStreams(myOptions)
+                .listStreams(myKinesisOptions)
                 .then(streams => {
                     debug("streams:", streams);
                     expect(streams).to.have.length(0);
@@ -40,60 +38,38 @@ describe("My kinesis module", function() {
         const newStreamNames = ["one", "two", "three"];
 
         before(() => {
-            var Writable = require("stream").Writable,
-                kinesis = require("kinesis");
-
-            require("https").globalAgent.maxSockets = Infinity;
-
-            var consoleOut = new Writable({ objectMode: true });
-            consoleOut._write = function(chunk, encoding, cb) {
-                chunk.Data = chunk.Data.slice(0, 10);
-                console.dir(chunk);
-                cb();
-            };
-
-            debug("creating streams");
-            // const kinesis = myKinesis.expose();
-            newStreamNames.forEach(newStreamName => {
-                const newStreamOptions = Object.assign(
-                    {},
-                    { name: newStreamName },
-                    myOptions
-                );
-                var kinesisStream = kinesis.stream(newStreamOptions);
-                kinesisStream.pipe(consoleOut);
+            return new Promise((resolve, reject) => {
+                newStreamNames.forEach(newStreamName => {
+                    myKinesis
+                        .createStream(newStreamName, 1, myKinesisOptions)
+                        .then(() => {
+                            debug(`stream ${newStreamName} created`);
+                            resolve();
+                        })
+                        .catch(err => {
+                            debug(`could not delete stream ${newStreamName}: ${err}`);
+                            reject(err);
+                        });
+                });
             });
+        });
 
-            var now = new Date().getTime();
-            while (new Date().getTime() < now + 1000) {
-                /* do nothing */
-            }
-
-            var Readable = require("stream").Readable;
-
-            var readable = new Readable({ objectMode: true });
-            readable._read = function() {
-                for (var i = 0; i < 100; i++)
-                    this.push({
-                        PartitionKey: i.toString(),
-                        Data: new Buffer("a")
+        after(() => {
+            newStreamNames.forEach(streamName => {
+                myKinesis
+                    .deleteStream(streamName, myKinesisOptions)
+                    .then(() => {
+                        debug(`stream ${streamName} deleted`);
+                    })
+                    .catch(err => {
+                        debug(`could not delete stream ${streamName}: ${err}`);
                     });
-                this.push(null);
-            };
-
-            var kinesisStream = kinesis.stream({
-                name: "one",
-                writeConcurrency: 5
-            });
-
-            readable.pipe(kinesisStream).on("end", function() {
-                console.log("done");
             });
         });
 
         it("can ask for stream names", done => {
             myKinesis
-                .listStreams(myOptions)
+                .listStreams(myKinesisOptions)
                 .then(streams => {
                     debug("streams:", streams);
                     expect(streams).to.have.length(newStreamNames.length);
