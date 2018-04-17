@@ -1,9 +1,8 @@
-const debug = require("debug")("reader-scripts-kinesis");
-const kinesis = require("kinesis");
+const debug = require("debug")("reader-scripts-kinesis"),
+    kinesis = require("kinesis"),
+    crypto = require("crypto");
 
 module.exports = {
-    expose: () => kinesis,
-
     createStream: (name, shardCount, options) => {
         return new Promise((resolve, reject) => {
             if (!name) reject("Name is required.");
@@ -12,9 +11,9 @@ module.exports = {
             debug(`creating stream ${name}, ${shardCount}, ${JSON.stringify(options)}`);
 
             const data = { StreamName: name, ShardCount: shardCount };
-            kinesis.request("CreateStream", data, options, err => {
-                if (err) reject(`Stream ${name} could not be created: ${err}`);
-                resolve(data);
+            kinesis.request("CreateStream", data, options, (err, out) => {
+                if (err) reject(err);
+                resolve(out);
             });
         });
     },
@@ -26,9 +25,24 @@ module.exports = {
             debug(`getting stream info ${name}, ${JSON.stringify(options)}`);
 
             const data = { StreamName: name };
-            kinesis.request("DescribeStream", data, options, (err, data) => {
-                if (err) reject(`Stream ${name} could not be described: ${err}`);
-                resolve(data);
+            kinesis.request("DescribeStream", data, options, (err, out) => {
+                if (err) reject(err);
+                resolve(out);
+            });
+        });
+    },
+    putRecord: (name, record, partitionKey, options) => {
+        return new Promise((resolve, reject) => {
+            if (!name) reject("Name is required.");
+            if (!partitionKey) partitionKey = crypto.randomBytes(16).toString("hex");
+            options = options || {};
+            debug(`putting data ${JSON.stringify(record)} into ${name}`);
+
+            record = Buffer.from(JSON.stringify(record)).toString("base64");
+            const data = { StreamName: name, Data: record, PartitionKey: partitionKey };
+            kinesis.request("PutRecord", data, options, (err, out) => {
+                if (err) reject(err);
+                resolve(out);
             });
         });
     },
@@ -41,8 +55,7 @@ module.exports = {
 
             const data = { StreamName: name };
             kinesis.request("DeleteStream", data, options, (err, out) => {
-                debug(`deleteStream callback ${err}, ${out}`);
-                if (err) reject(`Stream ${name} could not be deleted: ${err}`);
+                if (err) reject(err);
                 resolve(out);
             });
         });
@@ -54,15 +67,8 @@ module.exports = {
             debug(`getting streams with options ${JSON.stringify(options)}`);
 
             kinesis.listStreams(options, (err, streams) => {
-                if (err) {
-                    debug("listStreams error:", err);
-                    reject(err);
-                } else {
-                    debug("listStreams count:", streams.length);
-                    streams = streams || [];
-                    debug("listStreams count:", streams.length);
-                    resolve(streams);
-                }
+                if (err) reject(err);
+                resolve(streams || []);
             });
         });
     }
