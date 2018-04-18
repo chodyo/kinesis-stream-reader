@@ -43,6 +43,7 @@ describe("My kinesis module", function() {
         const nonEmptyStreamNames = ["one", "two", "three"];
         const stream = nonEmptyStreamNames[0];
         const data = { test: true };
+        let record = null;
 
         before(() => {
             return new Promise((resolve, reject) => {
@@ -89,11 +90,33 @@ describe("My kinesis module", function() {
                 });
         });
 
-        it("can put and get a record", done => {
+        it("can put a record", done => {
             myKinesis
                 .putRecord(stream, data, null, myKinesisOptions)
-                .then(() => {
-                    debug(`put data ${JSON.stringify(data)} to stream ${stream}`);
+                .then(returnObj => {
+                    debug(`put data ${JSON.stringify(data)} to stream ${stream}; ${JSON.stringify(returnObj)}`);
+                    record = returnObj;
+                    done();
+                })
+                .catch(err => {
+                    debug(`err: ${err}`);
+                    done(err);
+                });
+        });
+
+        it("can get a record using shard iterator type AT_SEQUENCE_NUMBER", done => {
+            myKinesis
+                .getRecords(
+                    stream,
+                    "AT_SEQUENCE_NUMBER",
+                    record.ShardId,
+                    { StartingSequenceNumber: record.SequenceNumber },
+                    myKinesisOptions
+                )
+                .then(returnObj => {
+                    debug(`got a record using shard iterator type AT_SEQUENCE_NUMBER: ${JSON.stringify(returnObj)}`);
+                    expect(returnObj.records).to.have.length(1);
+                    expect(JSON.parse(returnObj.records[0])).to.deep.equal(data);
                     done();
                 })
                 .catch(err => {

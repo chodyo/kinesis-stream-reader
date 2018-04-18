@@ -39,7 +39,7 @@ module.exports = {
             options = options || {};
             debug(`putting data ${JSON.stringify(record)} into ${name}`);
 
-            record = Buffer.from(JSON.stringify(record)).toString("base64");
+            record = serialize(record);
             const data = { StreamName: name, Data: record, PartitionKey: partitionKey };
             kinesis.request("PutRecord", data, options, (err, out) => {
                 if (err) reject(err);
@@ -48,8 +48,40 @@ module.exports = {
         });
     },
 
-    getRecords: () => {
-        return new Promise((resolve, reject) => {});
+    getRecords: (name, shardIteratorType, shardId, params, options) => {
+        return new Promise((resolve, reject) => {
+            if (!name) reject("Name is required.");
+            if (!shardIteratorType) reject("ShardIteratorType is required.");
+            if (!shardId) shardId = "0";
+            options = options || {};
+
+            const iteratorData = { ShardId: shardId, ShardIteratorType: shardIteratorType, StreamName: name };
+            switch (shardIteratorType) {
+            case "AT_SEQUENCE_NUMBER":
+            case "AFTER_SEQUENCE_NUMBER":
+                if (!params.StartingSequenceNumber)
+                    reject("params.StartingSequenceNumber is required when shardIteratorType=AT_SEQUENCE_NUMBER");
+                iteratorData.StartingSequenceNumber = params.StartingSequenceNumber;
+                break;
+            default:
+                reject("Unknown ShardIteratorType");
+                break;
+            }
+
+            kinesis.request("GetShardIterator", iteratorData, options, (err, response) => {
+                if (err) reject(err);
+                debug(`getShardIterator response: ${JSON.stringify(response)}`);
+                kinesis.request("GetRecords", { ShardIterator: response.ShardIterator }, options, (err, response) => {
+                    if (err) reject(err);
+                    debug(`GetRecords response: ${JSON.stringify(response)}`);
+                    resolve({
+                        behindLatest: response.MillisBehindLatest,
+                        shardIterator: response.NextShardIterator,
+                        records: response.Records.map(record => deserialize(record.Data))
+                    });
+                });
+            });
+        });
     },
 
     deleteStream: (name, options) => {
@@ -78,3 +110,13 @@ module.exports = {
         });
     }
 };
+
+function serialize(record) {
+    // return btoa(JSON.stringify(record));
+    return Buffer.from(JSON.stringify(record)).toString("base64");
+}
+
+function deserialize(record) {
+    // return JSON.parse(atob(record));
+    return Buffer.from(record, "base64").toString("ascii");
+}
