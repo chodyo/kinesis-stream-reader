@@ -31,6 +31,7 @@ module.exports = {
             });
         });
     },
+
     putRecord: (name, record, partitionKey, options) => {
         return new Promise((resolve, reject) => {
             if (!name) reject("Name is required.");
@@ -45,6 +46,10 @@ module.exports = {
                 resolve(out);
             });
         });
+    },
+
+    getRecords: () => {
+        return new Promise((resolve, reject) => {});
     },
 
     deleteStream: (name, options) => {

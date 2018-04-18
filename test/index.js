@@ -89,9 +89,9 @@ describe("My kinesis module", function() {
                 });
         });
 
-        it("can put data", done => {
+        it("can put and get a record", done => {
             myKinesis
-                .putData(stream, data, null, myKinesisOptions)
+                .putRecord(stream, data, null, myKinesisOptions)
                 .then(() => {
                     debug(`put data ${JSON.stringify(data)} to stream ${stream}`);
                     done();
