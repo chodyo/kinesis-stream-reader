@@ -57,29 +57,40 @@ module.exports = {
 
             const iteratorData = { ShardId: shardId, ShardIteratorType: shardIteratorType, StreamName: name };
             switch (shardIteratorType) {
-            case "AT_SEQUENCE_NUMBER":
-            case "AFTER_SEQUENCE_NUMBER":
-                if (!params.StartingSequenceNumber)
-                    reject("params.StartingSequenceNumber is required when shardIteratorType=AT_SEQUENCE_NUMBER");
-                iteratorData.StartingSequenceNumber = params.StartingSequenceNumber;
-                break;
-            default:
-                reject("Unknown ShardIteratorType");
-                break;
+                case "AT_SEQUENCE_NUMBER":
+                case "AFTER_SEQUENCE_NUMBER":
+                    if (!params.StartingSequenceNumber)
+                        reject("params.StartingSequenceNumber is required when shardIteratorType=AT_SEQUENCE_NUMBER");
+                    iteratorData.StartingSequenceNumber = params.StartingSequenceNumber;
+                    break;
+                default:
+                    reject("Unknown ShardIteratorType");
+                    break;
             }
 
-            kinesis.request("GetShardIterator", iteratorData, options, (err, response) => {
-                if (err) reject(err);
-                debug(`getShardIterator response: ${JSON.stringify(response)}`);
-                kinesis.request("GetRecords", { ShardIterator: response.ShardIterator }, options, (err, response) => {
-                    if (err) reject(err);
-                    debug(`GetRecords response: ${JSON.stringify(response)}`);
-                    resolve({
-                        behindLatest: response.MillisBehindLatest,
-                        shardIterator: response.NextShardIterator,
-                        records: response.Records.map(record => deserialize(record.Data))
+            function kinesisRecordsFetcher(shardIterator) {
+                return new Promise((resolve, reject) => {
+                    kinesis.request("GetRecords", { ShardIterator: shardIterator }, options, (err, response) => {
+                        if (err) reject(err);
+                        resolve(response);
                     });
                 });
+            }
+
+            kinesis.request("GetShardIterator", iteratorData, options, async (err, response) => {
+                if (err) reject(err);
+                debug(`getShardIterator response: ${JSON.stringify(response)}`);
+                const allRecords = [];
+                let isBehindLatest = 1;
+                let shardIterator = response.ShardIterator;
+                while (isBehindLatest !== 0 && shardIterator !== null) {
+                    const response = await kinesisRecordsFetcher(shardIterator);
+                    debug(`GetRecords response: ${JSON.stringify(response)}`);
+                    shardIterator = response.NextShardIterator;
+                    isBehindLatest = response.MillisBehindLatest;
+                    response.Records.forEach(record => allRecords.push(deserialize(record.Data)));
+                }
+                resolve(allRecords);
             });
         });
     },

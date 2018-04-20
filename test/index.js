@@ -99,9 +99,10 @@ describe("My kinesis module", function() {
                 )
             )
             .then(records => {
-                debug(`got a record using shard iterator type AT_SEQUENCE_NUMBER: ${JSON.stringify(records)}`);
-                expect(records.records).to.have.length(1);
-                expect(JSON.parse(records.records[0])).to.deep.equal(data);
+                debug(`records gotten using shard iterator type AT_SEQUENCE_NUMBER: ${JSON.stringify(records)}`);
+                expect(records).to.be.an("array");
+                expect(records).to.deep.include.members([JSON.stringify(data)]);
+                expect(records).to.have.length(1);
                 done();
             })
             .catch(err => {
