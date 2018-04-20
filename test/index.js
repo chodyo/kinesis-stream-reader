@@ -16,113 +16,97 @@ const kinesaliteServer = kinesalite({
     };
 
 describe("My kinesis module", function() {
+    const nonEmptyStreamNames = ["one", "two", "three"];
+
     before(function() {
         kinesaliteServer.listen(4567, function(err) {
             if (err) throw err;
             debug("Kinesalite server started on port 4567");
         });
-    });
-
-    describe("with no existing streams", function() {
-        it("can ask for stream names", done => {
-            myKinesis
-                .listStreams(myKinesisOptions)
-                .then(streams => {
-                    debug(`streams: ${streams}`);
-                    expect(streams).to.have.length(0);
-                    done();
-                })
-                .catch(err => {
-                    debug(`err: ${err}`);
-                    done(err);
-                });
-        });
-    });
-
-    describe("with existing streams", function() {
-        const nonEmptyStreamNames = ["one", "two", "three"];
-        const stream = nonEmptyStreamNames[0];
-        const data = { test: true };
-        let record = null;
-
-        before(() => {
-            return new Promise((resolve, reject) => {
-                nonEmptyStreamNames.forEach(newStreamName => {
-                    myKinesis
-                        .createStream(newStreamName, 1, myKinesisOptions)
-                        .then(() => {
-                            debug(`stream ${newStreamName} created`);
-                            resolve();
-                        })
-                        .catch(err => {
-                            debug(`could not create stream ${newStreamName}: ${err}`);
-                            reject(err);
-                        });
-                });
-            });
-        });
-
-        after(() => {
-            nonEmptyStreamNames.forEach(streamName => {
+        return new Promise((resolve, reject) => {
+            nonEmptyStreamNames.forEach(newStreamName => {
                 myKinesis
-                    .deleteStream(streamName, myKinesisOptions)
+                    .createStream(newStreamName, 1, myKinesisOptions)
                     .then(() => {
-                        debug(`stream ${streamName} deleted`);
+                        debug(`stream ${newStreamName} created`);
+                        resolve();
                     })
                     .catch(err => {
-                        debug(`could not delete stream ${streamName}: ${err}`);
+                        debug(`could not create stream ${newStreamName}: ${err}`);
+                        reject(err);
                     });
             });
         });
+    });
 
-        it("can ask for stream names", done => {
+    after(() => {
+        nonEmptyStreamNames.forEach(streamName => {
             myKinesis
-                .listStreams(myKinesisOptions)
-                .then(streams => {
-                    debug(`streams: ${streams}`);
-                    expect(streams).to.have.length(nonEmptyStreamNames.length);
-                    expect(streams).to.have.same.members(nonEmptyStreamNames);
-                    done();
+                .deleteStream(streamName, myKinesisOptions)
+                .then(() => {
+                    debug(`stream ${streamName} deleted`);
                 })
                 .catch(err => {
-                    debug(`err: ${err}`);
-                    done(err);
+                    debug(`could not delete stream ${streamName}: ${err}`);
                 });
         });
+    });
 
-        it("can put a record", done => {
-            myKinesis
-                .putRecord(stream, data, null, myKinesisOptions)
-                .then(returnObj => {
-                    debug(`put data ${JSON.stringify(data)} to stream ${stream}; ${JSON.stringify(returnObj)}`);
-                    record = returnObj;
-                    done();
-                })
-                .catch(err => {
-                    debug(`err: ${err}`);
-                    done(err);
-                });
-        });
+    it("can ask for stream names", done => {
+        myKinesis
+            .listStreams(myKinesisOptions)
+            .then(streams => {
+                debug(`streams: ${streams}`);
+                expect(streams).to.have.length(nonEmptyStreamNames.length);
+                expect(streams).to.have.same.members(nonEmptyStreamNames);
+                done();
+            })
+            .catch(err => {
+                debug(`err: ${err}`);
+                done(err);
+            });
+    });
 
-        it("can get a record using shard iterator type AT_SEQUENCE_NUMBER", done => {
-            myKinesis
-                .getRecords(
+    it("can put a record", done => {
+        const stream = nonEmptyStreamNames[0],
+            data = { test: true };
+        myKinesis
+            .putRecord(stream, data, null, myKinesisOptions)
+            .then(returnObj => {
+                debug(`put data ${JSON.stringify(data)} to stream ${stream}; ${JSON.stringify(returnObj)}`);
+                expect(returnObj).to.haveOwnProperty("SequenceNumber");
+                expect(returnObj).to.haveOwnProperty("ShardId");
+                done();
+            })
+            .catch(err => {
+                debug(`err: ${err}`);
+                done(err);
+            });
+    });
+
+    it("can get a record using shard iterator type AT_SEQUENCE_NUMBER", done => {
+        const stream = nonEmptyStreamNames[0],
+            data = { myData: String(Math.random() * 0x10000000000000) };
+        myKinesis
+            .putRecord(stream, data, null, myKinesisOptions)
+            .then(returnObj =>
+                myKinesis.getRecords(
                     stream,
                     "AT_SEQUENCE_NUMBER",
-                    record.ShardId,
-                    { StartingSequenceNumber: record.SequenceNumber },
+                    returnObj.ShardId,
+                    { StartingSequenceNumber: returnObj.SequenceNumber },
                     myKinesisOptions
                 )
-                .then(returnObj => {
-                    debug(`got a record using shard iterator type AT_SEQUENCE_NUMBER: ${JSON.stringify(returnObj)}`);
-                    expect(returnObj.records).to.have.length(1);
-                    expect(JSON.parse(returnObj.records[0])).to.deep.equal(data);
-                    done();
-                })
-                .catch(err => {
-                    debug(`err: ${err}`);
-                    done(err);
-                });
-        });
+            )
+            .then(records => {
+                debug(`got a record using shard iterator type AT_SEQUENCE_NUMBER: ${JSON.stringify(records)}`);
+                expect(records.records).to.have.length(1);
+                expect(JSON.parse(records.records[0])).to.deep.equal(data);
+                done();
+            })
+            .catch(err => {
+                debug(`err: ${err}`);
+                done(err);
+            });
     });
 });
