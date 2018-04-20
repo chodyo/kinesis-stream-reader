@@ -19,11 +19,11 @@ describe("My kinesis module", function() {
     const nonEmptyStreamNames = ["one", "two", "three"];
 
     before(function() {
-        kinesaliteServer.listen(4567, function(err) {
-            if (err) throw err;
-            debug("Kinesalite server started on port 4567");
-        });
         return new Promise((resolve, reject) => {
+            kinesaliteServer.listen(4567, function(err) {
+                if (err) throw err;
+                debug("Kinesalite server started on port 4567");
+            });
             nonEmptyStreamNames.forEach(newStreamName => {
                 myKinesis
                     .createStream(newStreamName, 1, myKinesisOptions)
@@ -86,7 +86,7 @@ describe("My kinesis module", function() {
 
     it("can get a record using shard iterator type AT_SEQUENCE_NUMBER", done => {
         const stream = nonEmptyStreamNames[0],
-            data = { myData: String(Math.random() * 0x10000000000000) };
+            data = { myData: Math.random() * 0x10000000000000 };
         myKinesis
             .putRecord(stream, data, null, myKinesisOptions)
             .then(returnObj =>
@@ -103,6 +103,35 @@ describe("My kinesis module", function() {
                 expect(records).to.be.an("array");
                 expect(records).to.deep.include.members([JSON.stringify(data)]);
                 expect(records).to.have.length(1);
+                done();
+            })
+            .catch(err => {
+                debug(`err: ${err}`);
+                done(err);
+            });
+    });
+
+    it("can get multiple records using shard iterator type AT_SEQUENCE_NUMBER", done => {
+        const stream = nonEmptyStreamNames[1],
+            data = [0, 1].map(() => {
+                return { myData: Math.random() * 0x10000000000000 };
+            });
+        myKinesis
+            .putRecords(stream, data, null, myKinesisOptions)
+            .then(returnObj =>
+                myKinesis.getRecords(
+                    stream,
+                    "AT_SEQUENCE_NUMBER",
+                    returnObj.ShardId,
+                    { StartingSequenceNumber: returnObj.SequenceNumber },
+                    myKinesisOptions
+                )
+            )
+            .then(records => {
+                debug(`records gotten using shard iterator type AT_SEQUENCE_NUMBER: ${JSON.stringify(records)}`);
+                expect(records).to.be.an("array");
+                expect(records).to.deep.include.members([JSON.stringify(data)]);
+                expect(records).to.have.length(data.length);
                 done();
             })
             .catch(err => {

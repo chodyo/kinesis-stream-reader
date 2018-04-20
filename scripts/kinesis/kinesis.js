@@ -5,7 +5,7 @@ const debug = require("debug")("reader-scripts-kinesis"),
 module.exports = {
     createStream: (name, shardCount, options) => {
         return new Promise((resolve, reject) => {
-            if (!name) reject("Name is required.");
+            if (!name) reject("Streamname is required.");
             shardCount = shardCount || 1;
             options = options || {};
             debug(`creating stream ${name}, ${shardCount}, ${JSON.stringify(options)}`);
@@ -20,7 +20,7 @@ module.exports = {
 
     getStreamInfo: (name, options) => {
         return new Promise((resolve, reject) => {
-            if (!name) reject("Name is required.");
+            if (!name) reject("Streamname is required.");
             options = options || {};
             debug(`getting stream info ${name}, ${JSON.stringify(options)}`);
 
@@ -34,7 +34,7 @@ module.exports = {
 
     putRecord: (name, record, partitionKey, options) => {
         return new Promise((resolve, reject) => {
-            if (!name) reject("Name is required.");
+            if (!name) reject("Streamname is required.");
             if (!partitionKey) partitionKey = crypto.randomBytes(16).toString("hex");
             options = options || {};
             debug(`putting data ${JSON.stringify(record)} into ${name}`);
@@ -48,9 +48,30 @@ module.exports = {
         });
     },
 
+    putRecords: (name, records, options) => {
+        return new Promise((resolve, reject) => {
+            debug(`putting data ${JSON.stringify(records)} into ${name}`);
+            if (!name) reject("Streamname is required.");
+            records.map(record => {
+                return {
+                    Data: serialize(record),
+                    PartitionKey: crypto.randomBytes(16).toString("hex")
+                };
+            });
+            options = options || {};
+
+            const data = { StreamName: name, Records: records };
+            debug(`putting data ${JSON.stringify(data)} into ${name}`);
+            kinesis.request("PutRecords", data, options, (err, out) => {
+                if (err) reject(err);
+                resolve(out);
+            });
+        });
+    },
+
     getRecords: (name, shardIteratorType, shardId, params, options) => {
         return new Promise((resolve, reject) => {
-            if (!name) reject("Name is required.");
+            if (!name) reject("Streamname is required.");
             if (!shardIteratorType) reject("ShardIteratorType is required.");
             if (!shardId) shardId = "0";
             options = options || {};
@@ -97,7 +118,7 @@ module.exports = {
 
     deleteStream: (name, options) => {
         return new Promise((resolve, reject) => {
-            if (!name) reject("Name is required.");
+            if (!name) reject("Streamname is required.");
             options = options || {};
             debug(`deleting stream ${name}, ${JSON.stringify(options)}`);
 
