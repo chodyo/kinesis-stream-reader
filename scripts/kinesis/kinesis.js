@@ -52,7 +52,7 @@ module.exports = {
         return new Promise((resolve, reject) => {
             debug(`putting data ${JSON.stringify(records)} into ${name}`);
             if (!name) reject("Streamname is required.");
-            records.map(record => {
+            records = records.map(record => {
                 return {
                     Data: serialize(record),
                     PartitionKey: crypto.randomBytes(16).toString("hex")
@@ -99,8 +99,8 @@ module.exports = {
             }
 
             kinesis.request("GetShardIterator", iteratorData, options, async (err, response) => {
-                if (err) reject(err);
                 debug(`getShardIterator response: ${JSON.stringify(response)}`);
+                if (err) reject(err);
                 const allRecords = [];
                 let isBehindLatest = 1;
                 let shardIterator = response.ShardIterator;
@@ -150,5 +150,5 @@ function serialize(record) {
 
 function deserialize(record) {
     // return JSON.parse(atob(record));
-    return Buffer.from(record, "base64").toString("ascii");
+    return JSON.parse(Buffer.from(record, "base64").toString());
 }

@@ -101,8 +101,8 @@ describe("My kinesis module", function() {
             .then(records => {
                 debug(`records gotten using shard iterator type AT_SEQUENCE_NUMBER: ${JSON.stringify(records)}`);
                 expect(records).to.be.an("array");
-                expect(records).to.deep.include.members([JSON.stringify(data)]);
                 expect(records).to.have.length(1);
+                expect(records).to.deep.equal([data]);
                 done();
             })
             .catch(err => {
@@ -117,21 +117,23 @@ describe("My kinesis module", function() {
                 return { myData: Math.random() * 0x10000000000000 };
             });
         myKinesis
-            .putRecords(stream, data, null, myKinesisOptions)
-            .then(returnObj =>
-                myKinesis.getRecords(
+            .putRecords(stream, data, myKinesisOptions)
+            .then(returnObj => {
+                debug(`putRecords return obj: ${JSON.stringify(returnObj)}`);
+                expect(returnObj.FailedRecordCount).to.equal(0);
+                return myKinesis.getRecords(
                     stream,
                     "AT_SEQUENCE_NUMBER",
-                    returnObj.ShardId,
-                    { StartingSequenceNumber: returnObj.SequenceNumber },
+                    returnObj.Records[0].ShardId,
+                    { StartingSequenceNumber: returnObj.Records[0].SequenceNumber },
                     myKinesisOptions
-                )
-            )
+                );
+            })
             .then(records => {
                 debug(`records gotten using shard iterator type AT_SEQUENCE_NUMBER: ${JSON.stringify(records)}`);
                 expect(records).to.be.an("array");
-                expect(records).to.deep.include.members([JSON.stringify(data)]);
                 expect(records).to.have.length(data.length);
+                expect(records).to.deep.equal(data);
                 done();
             })
             .catch(err => {
