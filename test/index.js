@@ -15,6 +15,10 @@ const kinesaliteServer = kinesalite({
         credentials: { accessKeyId: "dummy", secretAccessKey: "dummy" }
     };
 
+function getRandomData() {
+    return Math.random() * 0x10000000000000;
+}
+
 describe("My kinesis module", function() {
     const nonEmptyStreamNames = ["one", "two", "three"];
 
@@ -69,7 +73,7 @@ describe("My kinesis module", function() {
 
     it("can put a record", done => {
         const stream = nonEmptyStreamNames[0],
-            data = { test: true };
+            data = { myRecord: getRandomData() };
         myKinesis
             .putRecord(stream, data, null, myKinesisOptions)
             .then(returnObj => {
@@ -86,7 +90,7 @@ describe("My kinesis module", function() {
 
     it("can get a record using shard iterator type AT_SEQUENCE_NUMBER", done => {
         const stream = nonEmptyStreamNames[0],
-            data = { myData: Math.random() * 0x10000000000000 };
+            data = { myRecord: getRandomData() };
         myKinesis
             .putRecord(stream, data, null, myKinesisOptions)
             .then(returnObj =>
@@ -114,7 +118,7 @@ describe("My kinesis module", function() {
     it("can get multiple records using shard iterator type AT_SEQUENCE_NUMBER", done => {
         const stream = nonEmptyStreamNames[1],
             data = [0, 1].map(() => {
-                return { myData: Math.random() * 0x10000000000000 };
+                return { myRecord: getRandomData() };
             });
         myKinesis
             .putRecords(stream, data, myKinesisOptions)
@@ -140,5 +144,45 @@ describe("My kinesis module", function() {
                 debug(`err: ${err}`);
                 done(err);
             });
+    });
+
+    it("can delete a stream", done => {
+        // choose a stream to delete and clean it up from the list. this will
+        // help the `after` function not try to delete a non-existant stream
+        const streamIndex = 2;
+        const stream = nonEmptyStreamNames[streamIndex];
+        nonEmptyStreamNames.splice(streamIndex, 1);
+        myKinesis
+            .deleteStream(stream, myKinesisOptions)
+            .then(deleteStreamResponse => {
+                debug(`deleteStreamResponse: ${deleteStreamResponse}`);
+                return myKinesis.listStreams(myKinesisOptions);
+            })
+            .then(streams => {
+                debug(`streams: ${streams}`);
+                expect(streams).to.be.an("array");
+                expect(streams).to.deep.equal(nonEmptyStreamNames);
+                done();
+            })
+            .catch(err => {
+                debug(`error: ${err}`);
+                done(err);
+            });
+    });
+
+    it("gets an error trying to delete a stream that doesn't exist", () => {
+        const stream = getRandomData().toString();
+        return myKinesis.deleteStream(stream, myKinesisOptions).then(
+            () => {
+                debug("deleting a non-existant stream worked");
+                throw new Error("This should have failed");
+            },
+            err => {
+                debug(`err: ${err}, ${typeof err}`);
+                expect(err.toString()).to.equal(
+                    `ResourceNotFoundException: Stream ${stream} under account 000000000000 not found.`
+                );
+            }
+        );
     });
 });

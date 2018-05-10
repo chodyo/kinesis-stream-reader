@@ -123,9 +123,9 @@ module.exports = {
             debug(`deleting stream ${name}, ${JSON.stringify(options)}`);
 
             const data = { StreamName: name };
-            kinesis.request("DeleteStream", data, options, (err, out) => {
+            kinesis.request("DeleteStream", data, options, err => {
                 if (err) reject(err);
-                resolve(out);
+                resolve(true);
             });
         });
     },
@@ -144,11 +144,9 @@ module.exports = {
 };
 
 function serialize(record) {
-    // return btoa(JSON.stringify(record));
     return Buffer.from(JSON.stringify(record)).toString("base64");
 }
 
 function deserialize(record) {
-    // return JSON.parse(atob(record));
     return JSON.parse(Buffer.from(record, "base64").toString());
 }
