@@ -163,19 +163,22 @@ describe("My kinesis module", function() {
     });
 
     it("fails gracefully when attempting to get a record from a non-existent stream", () => {
-        const stream = getRandomData().toString(),
-            data = { myRecord: getRandomData() };
-        myKinesis.getRecords(stream, data, null, myKinesisOptions).then(
-            () => {
-                debug("getting a record to a non-existent stream worked");
-                throw new Error("This should have failed.");
-            },
-            err => {
-                expect(err.toString()).to.equal(
-                    `ResourceNotFoundException: Stream ${stream} under account 000000000000 not found.`
-                );
-            }
-        );
+        const stream = getRandomData().toString();
+        myKinesis
+            .getRecords(stream, "AT_SEQUENCE_NUMBER", null, { StartingSequenceNumber: "1" }, myKinesisOptions)
+            .should.be.rejected();
+
+        // .then(
+        //     () => {
+        //         debug("getting a record to a non-existent stream worked");
+        //         throw new Error("This should have failed.");
+        //     },
+        //     err => {
+        //         expect(err.toString()).to.equal(
+
+        //         );
+        //     }
+        // );
     });
 
     it("can delete a stream", done => {

@@ -81,7 +81,7 @@ module.exports = {
                 case "AT_SEQUENCE_NUMBER":
                 case "AFTER_SEQUENCE_NUMBER":
                     if (!params.StartingSequenceNumber)
-                        reject("params.StartingSequenceNumber is required when shardIteratorType=AT_SEQUENCE_NUMBER");
+                        reject(`params.StartingSequenceNumber is required when shardIteratorType=${shardIteratorType}`);
                     iteratorData.StartingSequenceNumber = params.StartingSequenceNumber;
                     break;
                 default:
