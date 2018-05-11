@@ -35,7 +35,7 @@ module.exports = {
     putRecord: (name, record, partitionKey, options) => {
         return new Promise((resolve, reject) => {
             if (!name) reject("Streamname is required.");
-            if (!partitionKey) partitionKey = crypto.randomBytes(16).toString("hex");
+            partitionKey = partitionKey || crypto.randomBytes(16).toString("hex");
             options = options || {};
             debug(`putting data ${JSON.stringify(record)} into ${name}`);
 
@@ -48,14 +48,14 @@ module.exports = {
         });
     },
 
-    putRecords: (name, records, options) => {
+    putRecords: (name, records, partitionKey, options) => {
         return new Promise((resolve, reject) => {
             debug(`putting data ${JSON.stringify(records)} into ${name}`);
             if (!name) reject("Streamname is required.");
             records = records.map(record => {
                 return {
                     Data: serialize(record),
-                    PartitionKey: crypto.randomBytes(16).toString("hex")
+                    PartitionKey: partitionKey || crypto.randomBytes(16).toString("hex")
                 };
             });
             options = options || {};

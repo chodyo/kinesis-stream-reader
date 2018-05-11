@@ -88,6 +88,22 @@ describe("My kinesis module", function() {
             });
     });
 
+    it("fails gracefully when attempting to put a record in a non-existent stream", () => {
+        const stream = getRandomData().toString(),
+            data = { myRecord: getRandomData() };
+        myKinesis.putRecord(stream, data, null, myKinesisOptions).then(
+            () => {
+                debug("adding a record to a non-existent stream worked");
+                throw new Error("This should have failed.");
+            },
+            err => {
+                expect(err.toString()).to.equal(
+                    `ResourceNotFoundException: Stream ${stream} under account 000000000000 not found.`
+                );
+            }
+        );
+    });
+
     it("can get a record using shard iterator type AT_SEQUENCE_NUMBER", done => {
         const stream = nonEmptyStreamNames[0],
             data = { myRecord: getRandomData() };
@@ -121,7 +137,7 @@ describe("My kinesis module", function() {
                 return { myRecord: getRandomData() };
             });
         myKinesis
-            .putRecords(stream, data, myKinesisOptions)
+            .putRecords(stream, data, null, myKinesisOptions)
             .then(returnObj => {
                 debug(`putRecords return obj: ${JSON.stringify(returnObj)}`);
                 expect(returnObj.FailedRecordCount).to.equal(0);
@@ -146,11 +162,27 @@ describe("My kinesis module", function() {
             });
     });
 
+    it("fails gracefully when attempting to get a record from a non-existent stream", () => {
+        const stream = getRandomData().toString(),
+            data = { myRecord: getRandomData() };
+        myKinesis.getRecords(stream, data, null, myKinesisOptions).then(
+            () => {
+                debug("getting a record to a non-existent stream worked");
+                throw new Error("This should have failed.");
+            },
+            err => {
+                expect(err.toString()).to.equal(
+                    `ResourceNotFoundException: Stream ${stream} under account 000000000000 not found.`
+                );
+            }
+        );
+    });
+
     it("can delete a stream", done => {
         // choose a stream to delete and clean it up from the list. this will
         // help the `after` function not try to delete a non-existant stream
-        const streamIndex = 2;
-        const stream = nonEmptyStreamNames[streamIndex];
+        const streamIndex = 2,
+            stream = nonEmptyStreamNames[streamIndex];
         nonEmptyStreamNames.splice(streamIndex, 1);
         myKinesis
             .deleteStream(stream, myKinesisOptions)
@@ -170,15 +202,14 @@ describe("My kinesis module", function() {
             });
     });
 
-    it("gets an error trying to delete a stream that doesn't exist", () => {
+    it("fails gracefully when attempting to delete a stream that doesn't exist", () => {
         const stream = getRandomData().toString();
-        return myKinesis.deleteStream(stream, myKinesisOptions).then(
+        myKinesis.deleteStream(stream, myKinesisOptions).then(
             () => {
-                debug("deleting a non-existant stream worked");
+                debug("deleting a non-existent stream worked");
                 throw new Error("This should have failed");
             },
             err => {
-                debug(`err: ${err}, ${typeof err}`);
                 expect(err.toString()).to.equal(
                     `ResourceNotFoundException: Stream ${stream} under account 000000000000 not found.`
                 );
