@@ -1,7 +1,11 @@
-const expect = require("chai").expect,
+const chai = require("chai"),
+    chaiAsPromised = require("chai-as-promised"),
+    expect = chai.expect,
     debug = require("debug")("reader-tests"),
     kinesalite = require("kinesalite"),
     myKinesis = require("../scripts/kinesis");
+
+chai.use(chaiAsPromised);
 
 const kinesaliteServer = kinesalite({
         path: "./mydb",
@@ -91,16 +95,9 @@ describe("My kinesis module", function() {
     it("fails gracefully when attempting to put a record in a non-existent stream", () => {
         const stream = getRandomData().toString(),
             data = { myRecord: getRandomData() };
-        myKinesis.putRecord(stream, data, null, myKinesisOptions).then(
-            () => {
-                debug("adding a record to a non-existent stream worked");
-                throw new Error("This should have failed.");
-            },
-            err => {
-                expect(err.toString()).to.equal(
-                    `ResourceNotFoundException: Stream ${stream} under account 000000000000 not found.`
-                );
-            }
+        const noStreamPromise = myKinesis.putRecord(stream, data, null, myKinesisOptions);
+        return expect(noStreamPromise).to.eventually.be.rejectedWith(
+            `Stream ${stream} under account 000000000000 not found.`
         );
     });
 
@@ -164,21 +161,16 @@ describe("My kinesis module", function() {
 
     it("fails gracefully when attempting to get a record from a non-existent stream", () => {
         const stream = getRandomData().toString();
-        myKinesis
-            .getRecords(stream, "AT_SEQUENCE_NUMBER", null, { StartingSequenceNumber: "1" }, myKinesisOptions)
-            .should.be.rejected();
-
-        // .then(
-        //     () => {
-        //         debug("getting a record to a non-existent stream worked");
-        //         throw new Error("This should have failed.");
-        //     },
-        //     err => {
-        //         expect(err.toString()).to.equal(
-
-        //         );
-        //     }
-        // );
+        const noStreamPromise = myKinesis.getRecords(
+            stream,
+            "AT_SEQUENCE_NUMBER",
+            null,
+            { StartingSequenceNumber: "0" },
+            myKinesisOptions
+        );
+        return expect(noStreamPromise).to.eventually.be.rejectedWith(
+            `Shard shardId-000000000000 in stream ${stream} under account 000000000000 does not exist`
+        );
     });
 
     it("can delete a stream", done => {
@@ -207,16 +199,9 @@ describe("My kinesis module", function() {
 
     it("fails gracefully when attempting to delete a stream that doesn't exist", () => {
         const stream = getRandomData().toString();
-        myKinesis.deleteStream(stream, myKinesisOptions).then(
-            () => {
-                debug("deleting a non-existent stream worked");
-                throw new Error("This should have failed");
-            },
-            err => {
-                expect(err.toString()).to.equal(
-                    `ResourceNotFoundException: Stream ${stream} under account 000000000000 not found.`
-                );
-            }
+        const noStreamPromise = myKinesis.deleteStream(stream, myKinesisOptions);
+        return expect(noStreamPromise).to.eventually.be.rejectedWith(
+            `Stream ${stream} under account 000000000000 not found.`
         );
     });
 });
