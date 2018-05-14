@@ -98,9 +98,10 @@ module.exports = {
                 });
             }
 
-            kinesis.request("GetShardIterator", iteratorData, options, async (err, response) => {
+            async function kinesisShardIteratorCallback(err, response) {
                 debug(`getShardIterator response: ${JSON.stringify(response)}`);
-                if (err) reject(err);
+                if (err) throw err;
+                debug(`getShardIterator response: ${JSON.stringify(err)}`);
                 const allRecords = [];
                 let isBehindLatest = 1;
                 let shardIterator = response.ShardIterator;
@@ -112,6 +113,10 @@ module.exports = {
                     response.Records.forEach(record => allRecords.push(deserialize(record.Data)));
                 }
                 resolve(allRecords);
+            }
+
+            kinesis.request("GetShardIterator", iteratorData, options, (err, response) => {
+                kinesisShardIteratorCallback(err, response).catch(exception => reject(exception));
             });
         });
     },
