@@ -11,9 +11,9 @@ module.exports = {
             debug(`creating stream ${name}, ${shardCount}, ${JSON.stringify(options)}`);
 
             const data = { StreamName: name, ShardCount: shardCount };
-            kinesis.request("CreateStream", data, options, (err, out) => {
+            kinesis.request("CreateStream", data, options, err => {
                 if (err) reject(err);
-                resolve(out);
+                resolve();
             });
         });
     },

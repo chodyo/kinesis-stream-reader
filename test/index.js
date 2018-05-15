@@ -10,7 +10,8 @@ chai.use(chaiAsPromised);
 const kinesaliteServer = kinesalite({
         path: "./mydb",
         ssl: true,
-        createStreamMs: 0
+        createStreamMs: 0,
+        deleteStreamMs: 0
     }),
     myKinesisOptions = {
         host: "localhost",
