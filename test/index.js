@@ -49,15 +49,23 @@ describe("My kinesis module", function() {
     });
 
     after(() => {
-        nonEmptyStreamNames.forEach(streamName => {
-            myKinesis
-                .deleteStream(streamName, myKinesisOptions)
-                .then(() => {
-                    debug(`stream ${streamName} deleted`);
-                })
-                .catch(err => {
-                    debug(`could not delete stream ${streamName}: ${err}`);
-                });
+        return new Promise((resolve, reject) => {
+            Promise.all(
+                nonEmptyStreamNames.map(streamName =>
+                    myKinesis
+                        .deleteStream(streamName, myKinesisOptions)
+                        .then(deleteStreamResponse => {
+                            debug(`stream ${streamName} deleted with response: ${deleteStreamResponse}`);
+                        })
+                        .catch(err => {
+                            debug(`could not delete stream ${streamName}: ${err}`);
+                            reject(err);
+                        })
+                )
+            ).then(() => {
+                debug("deleted all streams");
+                resolve();
+            });
         });
     });
 
