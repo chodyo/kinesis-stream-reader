@@ -137,6 +137,36 @@ describe("My kinesis module", function() {
             });
     });
 
+    it("can get a record using shard iterator type AFTER_SEQUENCE_NUMBER", done => {
+        const stream = nonEmptyStreamNames[0],
+            data = [0, 1].map(() => {
+                return { myRecord: getRandomData() };
+            });
+        myKinesis
+            .putRecords(stream, data, null, myKinesisOptions)
+            .then(returnObj => {
+                expect(returnObj.FailedRecordCount).to.equal(0);
+                return myKinesis.getRecords(
+                    stream,
+                    "AFTER_SEQUENCE_NUMBER",
+                    returnObj.Records[0].ShardId,
+                    { StartingSequenceNumber: returnObj.Records[0].SequenceNumber },
+                    myKinesisOptions
+                );
+            })
+            .then(records => {
+                debug(`records gotten using shard iterator type AFTER_SEQUENCE_NUMBER: ${JSON.stringify(records)}`);
+                expect(records).to.be.an("array");
+                expect(records).to.have.length(data.length - 1);
+                expect(records).to.deep.equal(data.slice(1));
+                done();
+            })
+            .catch(err => {
+                debug(`err: ${err}`);
+                done(err);
+            });
+    });
+
     it("can get multiple records using shard iterator type AT_SEQUENCE_NUMBER", done => {
         const stream = nonEmptyStreamNames[1],
             data = [0, 1].map(() => {
@@ -160,6 +190,37 @@ describe("My kinesis module", function() {
                 expect(records).to.be.an("array");
                 expect(records).to.have.length(data.length);
                 expect(records).to.deep.equal(data);
+                done();
+            })
+            .catch(err => {
+                debug(`err: ${err}`);
+                done(err);
+            });
+    });
+
+    it("can get multiple records using shard iterator type AFTER_SEQUENCE_NUMBER", done => {
+        const stream = nonEmptyStreamNames[1],
+            data = [0, 1, 2].map(() => {
+                return { myRecord: getRandomData() };
+            });
+        myKinesis
+            .putRecords(stream, data, null, myKinesisOptions)
+            .then(returnObj => {
+                debug(`putRecords return obj: ${JSON.stringify(returnObj)}`);
+                expect(returnObj.FailedRecordCount).to.equal(0);
+                return myKinesis.getRecords(
+                    stream,
+                    "AFTER_SEQUENCE_NUMBER",
+                    returnObj.Records[0].ShardId,
+                    { StartingSequenceNumber: returnObj.Records[0].SequenceNumber },
+                    myKinesisOptions
+                );
+            })
+            .then(records => {
+                debug(`records gotten using shard iterator type AFTER_SEQUENCE_NUMBER: ${JSON.stringify(records)}`);
+                expect(records).to.be.an("array");
+                expect(records).to.have.length(data.length - 1);
+                expect(records).to.deep.equal(data.slice(1));
                 done();
             })
             .catch(err => {
