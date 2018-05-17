@@ -84,6 +84,12 @@ module.exports = {
                         reject(`params.StartingSequenceNumber is required when shardIteratorType=${shardIteratorType}`);
                     iteratorData.StartingSequenceNumber = params.StartingSequenceNumber;
                     break;
+                case "AT_TIMESTAMP":
+                    if (!params.Timestamp)
+                        reject(`params.Timestamp is required when shardIteratorType=${shardIteratorType}`);
+                    iteratorData.Timestamp = params.Timestamp;
+                    debug(iteratorData.Timestamp);
+                    break;
                 default:
                     reject("Unknown ShardIteratorType");
                     break;
@@ -98,10 +104,8 @@ module.exports = {
                 });
             }
 
-            async function kinesisShardIteratorCallback(err, response) {
+            async function kinesisShardIteratorCallback(response) {
                 debug(`getShardIterator response: ${JSON.stringify(response)}`);
-                if (err) throw err;
-                debug(`getShardIterator response: ${JSON.stringify(err)}`);
                 const allRecords = [];
                 let isBehindLatest = 1;
                 let shardIterator = response.ShardIterator;
@@ -116,7 +120,12 @@ module.exports = {
             }
 
             kinesis.request("GetShardIterator", iteratorData, options, (err, response) => {
-                kinesisShardIteratorCallback(err, response).catch(exception => reject(exception));
+                if (err) {
+                    debug(`getShardIterator error: ${JSON.stringify(err)}`);
+                    reject(err);
+                }
+
+                kinesisShardIteratorCallback(response).catch(exception => reject(exception));
             });
         });
     },
