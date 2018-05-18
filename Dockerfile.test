@@ -1,0 +1,11 @@
+# Use the production image as a base image
+FROM kinesis-reader
+
+# Override the NODE_ENV environment variable to 'dev' in order to get required test packages
+ENV NODE_ENV dev
+
+# Get test packages
+RUN yarn
+
+# Override the command to run the tests instead of the application
+CMD ["yarn", "test"]

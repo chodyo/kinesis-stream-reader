@@ -1,0 +1,29 @@
+FROM node:8-alpine
+
+ARG VERSION=1.0.0
+
+# Copy the application files
+WORKDIR /app
+# COPY /src/package.json /app
+# COPY /src/yarn.lock /app
+COPY /src/ /app
+
+LABEL license=MIT \
+      version=$VERSION
+
+# Set required environment variables
+ENV NODE_ENV production
+
+# Download the required packages for production
+RUN yarn
+
+#
+RUN apk add --no-cache --virtual .gyp \
+  python \
+  make \
+  g++ \
+  && yarn
+
+# Make the server run when running the container
+EXPOSE 3000
+CMD ["yarn", "start"]
